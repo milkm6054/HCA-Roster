@@ -32,6 +32,26 @@ Login page is available at `/login`.
 
 ## Setup
 
+### Default Admin Bootstrap (No Manual DB Steps)
+
+On login attempts, the app auto-creates a default `HCA_ORGA` account if it does not exist yet.
+
+Configured by environment variables:
+
+- `DEFAULT_ADMIN_EMAIL`
+- `DEFAULT_ADMIN_PASSWORD`
+- `DEFAULT_ADMIN_DISPLAY_NAME`
+
+If not set, defaults are:
+
+- `admin@hca.local`
+- `AdminPass123!`
+- `Default HCA Admin`
+
+After first login, change the default password by creating another admin account strategy in your internal process.
+
+Multiple admins can technically share one admin login simultaneously, but for accountability/audit it is strongly recommended each admin has their own credentials.
+
 1. Copy [.env.example](.env.example) to `.env` and set both `DATABASE_URL` and `AUTH_SECRET`.
 2. Install dependencies:
 
@@ -134,3 +154,11 @@ Use this flow when [HCA-Roster/hca-roster-checker](.) is already its own reposit
 
 - If you use preview environments, ensure each environment is linked to a Postgres instance and has `DATABASE_URL` set.
 - `npm run start:prod` is safe to run repeatedly; `prisma db push` updates the schema to match Prisma models.
+
+## Team Rep Account Management via UI
+
+HCA_ORGA users can create and delete Team Rep accounts from:
+
+- `/admin/team-reps`
+
+This is the supported flow for Team Rep lifecycle management, so no direct database editing is required.

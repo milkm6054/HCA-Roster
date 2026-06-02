@@ -47,9 +47,14 @@ export default async function RootLayout({
                     Teams
                   </Link>
                   {session.role === "HCA_ORGA" ? (
-                    <Link href="/matches" className="hover:text-slate-900">
-                      Matches
-                    </Link>
+                    <>
+                      <Link href="/matches" className="hover:text-slate-900">
+                        Matches
+                      </Link>
+                      <Link href="/admin/team-reps" className="hover:text-slate-900">
+                        Accounts
+                      </Link>
+                    </>
                   ) : null}
                   <Link href="/violations" className="hover:text-slate-900">
                     Violations

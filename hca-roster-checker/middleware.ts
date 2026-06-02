@@ -46,6 +46,10 @@ export async function middleware(request: NextRequest) {
     }
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
+
+  if (session.role === "TEAM_REP" && pathname.startsWith("/admin")) {
+    return NextResponse.redirect(new URL("/dashboard", request.url));
+  }
   return NextResponse.next();
 }
 

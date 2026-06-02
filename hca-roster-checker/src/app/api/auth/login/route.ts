@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
+import { ensureDefaultAdminAccount } from "@/lib/auth/bootstrapAdmin";
 import { prisma } from "@/lib/prisma";
 import { createSessionToken, SESSION_COOKIE_NAME } from "@/lib/auth/session";
 
@@ -12,6 +13,8 @@ export async function POST(request: Request) {
   if (!body.email || !body.password) {
     return NextResponse.json({ error: "Email and password are required." }, { status: 400 });
   }
+
+  await ensureDefaultAdminAccount();
 
   const user = await prisma.user.findUnique({
     where: { email: body.email.toLowerCase().trim() },
