@@ -16,7 +16,9 @@ export async function middleware(request: NextRequest) {
 
   if (isPublicPage) {
     if (session) {
-      return NextResponse.redirect(new URL("/dashboard", request.url));
+      const next = request.nextUrl.searchParams.get("next");
+      const destination = next && next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
+      return NextResponse.redirect(new URL(destination, request.url));
     }
     return NextResponse.next();
   }

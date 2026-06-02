@@ -35,31 +35,31 @@ export default async function RootLayout({
         <div className="min-h-screen">
           <header className="border-b border-slate-200 bg-white/90 backdrop-blur">
             <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-              <Link href="/dashboard" className="text-lg font-semibold tracking-tight">
+              <Link href="/dashboard" prefetch={false} className="text-lg font-semibold tracking-tight">
                 HCA Roster Checker
               </Link>
               {session ? (
                 <nav className="flex items-center gap-4 text-sm font-medium text-slate-600">
-                  <Link href="/dashboard" className="hover:text-slate-900">
+                  <Link href="/dashboard" prefetch={false} className="hover:text-slate-900">
                     Dashboard
                   </Link>
-                  <Link href="/teams" className="hover:text-slate-900">
+                  <Link href="/teams" prefetch={false} className="hover:text-slate-900">
                     Teams
                   </Link>
                   {session.role === "HCA_ORGA" ? (
                     <>
-                      <Link href="/matches" className="hover:text-slate-900">
+                      <Link href="/matches" prefetch={false} className="hover:text-slate-900">
                         Matches
                       </Link>
-                      <Link href="/admin/team-reps" className="hover:text-slate-900">
+                      <Link href="/admin/team-reps" prefetch={false} className="hover:text-slate-900">
                         Team Reps
                       </Link>
-                      <Link href="/admin/orga-accounts" className="hover:text-slate-900">
+                      <Link href="/admin/orga-accounts" prefetch={false} className="hover:text-slate-900">
                         HCA Orga
                       </Link>
                     </>
                   ) : null}
-                  <Link href="/violations" className="hover:text-slate-900">
+                  <Link href="/violations" prefetch={false} className="hover:text-slate-900">
                     Violations
                   </Link>
                   <span className="text-xs text-slate-500">
