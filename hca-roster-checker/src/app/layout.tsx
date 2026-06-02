@@ -47,7 +47,7 @@ export default async function RootLayout({
                     Dashboard
                   </Link>
                   <Link href="/teams" prefetch={false} className="hover:text-slate-900">
-                    Teams
+                    {session.role === "TEAM_REP" ? "Your Team" : "Teams"}
                   </Link>
                   {session.role === "HCA_ORGA" ? (
                     <>

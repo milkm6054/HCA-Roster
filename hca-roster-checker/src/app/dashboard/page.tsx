@@ -13,7 +13,7 @@ export default async function DashboardPage() {
   const repTeamFilter = session.role === "TEAM_REP" ? { id: session.teamId } : undefined;
   const repRosterFilter = session.role === "TEAM_REP" ? { teamId: session.teamId } : undefined;
 
-  const [totalTeams, totalPlayers, openViolations, lockedRosters] = await Promise.all([
+  const [totalTeams, totalPlayers, openViolations, lockedRosters, teamRepContacts, teamName] = await Promise.all([
     prisma.team.count({ where: repTeamFilter }),
     prisma.player.count({
       where:
@@ -41,6 +41,27 @@ export default async function DashboardPage() {
         ...repRosterFilter,
       },
     }),
+    session.role === "TEAM_REP" && session.teamId
+      ? prisma.user.findMany({
+          where: {
+            role: "TEAM_REP",
+            teamId: session.teamId,
+            isActive: true,
+          },
+          orderBy: [{ createdAt: "asc" }],
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+          },
+        })
+      : Promise.resolve([]),
+    session.role === "TEAM_REP" && session.teamId
+      ? prisma.team.findUnique({
+          where: { id: session.teamId },
+          select: { name: true },
+        })
+      : Promise.resolve(null),
   ]);
 
   const cards = [
@@ -66,6 +87,28 @@ export default async function DashboardPage() {
       <p className="text-sm text-slate-600">
         Source of truth is the web app + PostgreSQL database. Discord integration is intentionally deferred.
       </p>
+
+      {session.role === "TEAM_REP" ? (
+        <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
+          <h2 className="text-lg font-semibold tracking-tight">Your Team Reps</h2>
+          <p className="text-sm text-slate-600">
+            Team: {teamName?.name || "Unassigned"}
+          </p>
+          <ul className="space-y-2 text-sm">
+            {teamRepContacts.map((rep) => (
+              <li key={rep.id} className="rounded border border-slate-100 bg-slate-50 px-3 py-2">
+                <span className="font-medium text-slate-900">{rep.displayName || rep.username}</span>
+                {rep.displayName ? <span className="ml-2 text-slate-500">({rep.username})</span> : null}
+              </li>
+            ))}
+            {teamRepContacts.length === 0 ? (
+              <li className="rounded border border-slate-100 bg-slate-50 px-3 py-2 text-slate-500">
+                No team reps found for your team.
+              </li>
+            ) : null}
+          </ul>
+        </section>
+      ) : null}
     </section>
   );
 }

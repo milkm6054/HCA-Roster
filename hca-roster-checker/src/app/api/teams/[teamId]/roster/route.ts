@@ -19,15 +19,70 @@ export async function GET(
   const { searchParams } = new URL(request.url);
   const season = searchParams.get("season") || "2026-S1";
 
-  const roster = await prisma.rosterEntry.findMany({
-    where: {
-      teamId,
-      season,
-      status: "ACTIVE",
-    },
-    include: { player: true },
-    orderBy: [{ lockedAt: "desc" }, { submittedAt: "desc" }],
-  });
+  const [roster, submittedEntriesCount, changeLogs] = await Promise.all([
+    prisma.rosterEntry.findMany({
+      where: {
+        teamId,
+        season,
+        status: "ACTIVE",
+      },
+      include: { player: true },
+      orderBy: [{ submittedAt: "desc" }],
+    }),
+    prisma.rosterEntry.count({
+      where: {
+        teamId,
+        season,
+      },
+    }),
+    prisma.auditLog.findMany({
+      where: {
+        entityType: "Team",
+        entityId: teamId,
+        action: {
+          in: ["ROSTER_PLAYER_ADDED", "ROSTER_PLAYER_REMOVED"],
+        },
+      },
+      orderBy: [{ createdAt: "desc" }],
+      take: 50,
+      select: {
+        id: true,
+        action: true,
+        actor: true,
+        details: true,
+        createdAt: true,
+      },
+    }),
+  ]);
 
-  return NextResponse.json({ season, roster });
+  const changes = changeLogs
+    .map((log) => {
+      const details =
+        log.details && typeof log.details === "object" && !Array.isArray(log.details)
+          ? (log.details as Record<string, unknown>)
+          : null;
+      const detailSeason = typeof details?.season === "string" ? details.season : null;
+
+      if (detailSeason && detailSeason !== season) {
+        return null;
+      }
+
+      return {
+        id: log.id,
+        action: log.action,
+        actor: log.actor,
+        steamId64: typeof details?.steamId64 === "string" ? details.steamId64 : null,
+        displayName: typeof details?.displayName === "string" ? details.displayName : null,
+        season: detailSeason || season,
+        createdAt: log.createdAt,
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
+
+  return NextResponse.json({
+    season,
+    roster,
+    hasSubmittedRoster: submittedEntriesCount > 0,
+    changes,
+  });
 }

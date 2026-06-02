@@ -25,6 +25,22 @@ export async function POST(
   const { searchParams } = new URL(request.url);
   const season = searchParams.get("season") || "2026-S1";
 
+  if (auth.session.role === "TEAM_REP") {
+    const existingSubmissionCount = await prisma.rosterEntry.count({
+      where: {
+        teamId,
+        season,
+      },
+    });
+
+    if (existingSubmissionCount > 0) {
+      return NextResponse.json(
+        { error: "Initial roster has already been submitted for this season." },
+        { status: 409 },
+      );
+    }
+  }
+
   const team = await prisma.team.findUnique({ where: { id: teamId } });
   if (!team) {
     return NextResponse.json({ error: "Team not found." }, { status: 404 });
