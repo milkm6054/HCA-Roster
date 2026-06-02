@@ -10,7 +10,8 @@ type Team = {
 
 type TeamRep = {
   id: string;
-  email: string;
+  username: string;
+  email?: string | null;
   displayName?: string | null;
   isActive: boolean;
   createdAt: string;
@@ -20,6 +21,7 @@ type TeamRep = {
 export default function TeamRepsAdminPage() {
   const [teams, setTeams] = useState<Team[]>([]);
   const [reps, setReps] = useState<TeamRep[]>([]);
+  const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -82,7 +84,7 @@ export default function TeamRepsAdminPage() {
       const res = await fetch("/api/admin/team-reps", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, displayName, teamId }),
+        body: JSON.stringify({ username, email, password, displayName, teamId }),
       });
 
       if (!res.ok) {
@@ -91,6 +93,7 @@ export default function TeamRepsAdminPage() {
         return;
       }
 
+      setUsername("");
       setEmail("");
       setPassword("");
       setDisplayName("");
@@ -127,11 +130,17 @@ export default function TeamRepsAdminPage() {
 
       <form onSubmit={createRep} className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 md:grid-cols-2">
         <input
+          type="text"
+          placeholder="Username"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          required
+        />
+        <input
           type="email"
-          placeholder="rep@example.com"
+          placeholder="Email (optional)"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          required
         />
         <input
           type="password"
@@ -165,6 +174,7 @@ export default function TeamRepsAdminPage() {
         <table className="w-full border-collapse text-left text-sm">
           <thead className="bg-slate-50">
             <tr>
+              <th className="px-4 py-3">Username</th>
               <th className="px-4 py-3">Email</th>
               <th className="px-4 py-3">Name</th>
               <th className="px-4 py-3">Team</th>
@@ -175,7 +185,8 @@ export default function TeamRepsAdminPage() {
           <tbody>
             {reps.map((rep) => (
               <tr key={rep.id} className="border-t border-slate-100">
-                <td className="px-4 py-3">{rep.email}</td>
+                <td className="px-4 py-3">{rep.username}</td>
+                <td className="px-4 py-3">{rep.email || "-"}</td>
                 <td className="px-4 py-3">{rep.displayName || "-"}</td>
                 <td className="px-4 py-3">{rep.team?.name || "-"}</td>
                 <td className="px-4 py-3">{new Date(rep.createdAt).toLocaleString()}</td>
@@ -192,7 +203,7 @@ export default function TeamRepsAdminPage() {
             ))}
             {reps.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-slate-500">
+                <td colSpan={6} className="px-4 py-6 text-center text-slate-500">
                   No Team Rep accounts yet.
                 </td>
               </tr>

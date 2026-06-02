@@ -4,9 +4,9 @@ import { prisma } from "@/lib/prisma";
 
 function getDefaultAdminConfig() {
   return {
-    email: (process.env.DEFAULT_ADMIN_EMAIL || "admin@hca.local").toLowerCase().trim(),
-    password: process.env.DEFAULT_ADMIN_PASSWORD || "AdminPass123!",
-    displayName: process.env.DEFAULT_ADMIN_DISPLAY_NAME || "Default HCA Admin",
+    username: (process.env.DEFAULT_ADMIN_USERNAME || "MILK").trim(),
+    password: process.env.DEFAULT_ADMIN_PASSWORD || "C0nn0rSucks!",
+    displayName: process.env.DEFAULT_ADMIN_DISPLAY_NAME || "MILK",
   };
 }
 
@@ -14,7 +14,7 @@ export async function ensureDefaultAdminAccount(): Promise<void> {
   const cfg = getDefaultAdminConfig();
 
   const existing = await prisma.user.findUnique({
-    where: { email: cfg.email },
+    where: { username: cfg.username },
     select: { id: true },
   });
 
@@ -26,7 +26,8 @@ export async function ensureDefaultAdminAccount(): Promise<void> {
 
   await prisma.user.create({
     data: {
-      email: cfg.email,
+      username: cfg.username,
+      email: null,
       passwordHash,
       displayName: cfg.displayName,
       role: UserRole.HCA_ORGA,

@@ -119,12 +119,14 @@ async function main() {
   await prisma.user.createMany({
     data: [
       {
-        email: "orga@hca.local",
+        username: "MILK",
+        email: "milk@hca.local",
         passwordHash,
         displayName: "HCA Admin",
         role: UserRole.HCA_ORGA,
       },
       {
+        username: "ABLE_REP",
         email: "rep@hca.local",
         passwordHash,
         displayName: "Team Rep",
@@ -136,8 +138,8 @@ async function main() {
 
   console.log("Seed complete.");
   console.log("Default logins:");
-  console.log("- HCA ORGA: orga@hca.local / ChangeMeNow123!");
-  console.log("- Team Rep: rep@hca.local / ChangeMeNow123!");
+  console.log("- HCA ORGA: MILK / ChangeMeNow123!");
+  console.log("- Team Rep: ABLE_REP / ChangeMeNow123!");
 }
 
 main()

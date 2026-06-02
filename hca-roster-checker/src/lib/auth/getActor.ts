@@ -7,5 +7,5 @@ export async function getActor(request: Request): Promise<string> {
     return "anonymous";
   }
 
-  return `${session.email} (${session.role})`;
+  return `${session.username} (${session.role})`;
 }

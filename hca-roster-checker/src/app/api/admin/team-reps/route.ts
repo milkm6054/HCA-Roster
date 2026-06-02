@@ -13,7 +13,13 @@ export async function GET(request: Request) {
 
   const reps = await prisma.user.findMany({
     where: { role: UserRole.TEAM_REP },
-    include: {
+    select: {
+      id: true,
+      username: true,
+      email: true,
+      displayName: true,
+      isActive: true,
+      createdAt: true,
       team: {
         select: { id: true, name: true, tag: true },
       },
@@ -32,18 +38,20 @@ export async function POST(request: Request) {
   }
 
   const body = (await request.json()) as {
-    email?: string;
+    username?: string;
     password?: string;
     displayName?: string;
+    email?: string;
     teamId?: string;
   };
 
-  const email = body.email?.toLowerCase().trim();
+  const username = body.username?.trim();
   const password = body.password?.trim();
   const teamId = body.teamId?.trim();
+  const email = body.email?.toLowerCase().trim() || null;
 
-  if (!email || !password || !teamId) {
-    return NextResponse.json({ error: "email, password, and teamId are required." }, { status: 400 });
+  if (!username || !password || !teamId) {
+    return NextResponse.json({ error: "username, password, and teamId are required." }, { status: 400 });
   }
 
   if (password.length < 8) {
@@ -55,15 +63,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Team not found." }, { status: 404 });
   }
 
-  const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+  const existing = await prisma.user.findFirst({
+    where: {
+      OR: [{ username: { equals: username, mode: "insensitive" } }, ...(email ? [{ email }] : [])],
+    },
+    select: { id: true },
+  });
   if (existing) {
-    return NextResponse.json({ error: "Email is already in use." }, { status: 409 });
+    return NextResponse.json({ error: "Username or email is already in use." }, { status: 409 });
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
 
   const rep = await prisma.user.create({
     data: {
+      username,
       email,
       passwordHash,
       displayName: body.displayName?.trim() || null,
@@ -71,7 +85,13 @@ export async function POST(request: Request) {
       teamId,
       isActive: true,
     },
-    include: {
+    select: {
+      id: true,
+      username: true,
+      email: true,
+      displayName: true,
+      isActive: true,
+      createdAt: true,
       team: {
         select: { id: true, name: true, tag: true },
       },

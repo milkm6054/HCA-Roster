@@ -6,18 +6,23 @@ import { createSessionToken, SESSION_COOKIE_NAME } from "@/lib/auth/session";
 
 export async function POST(request: Request) {
   const body = (await request.json()) as {
-    email?: string;
+    username?: string;
     password?: string;
   };
 
-  if (!body.email || !body.password) {
-    return NextResponse.json({ error: "Email and password are required." }, { status: 400 });
+  if (!body.username || !body.password) {
+    return NextResponse.json({ error: "Username and password are required." }, { status: 400 });
   }
 
   await ensureDefaultAdminAccount();
 
-  const user = await prisma.user.findUnique({
-    where: { email: body.email.toLowerCase().trim() },
+  const user = await prisma.user.findFirst({
+    where: {
+      username: {
+        equals: body.username.trim(),
+        mode: "insensitive",
+      },
+    },
   });
 
   if (!user || !user.isActive) {
@@ -35,7 +40,7 @@ export async function POST(request: Request) {
 
   const token = await createSessionToken({
     userId: user.id,
-    email: user.email,
+    username: user.username,
     role: user.role,
     teamId: user.teamId ?? undefined,
     displayName: user.displayName ?? undefined,

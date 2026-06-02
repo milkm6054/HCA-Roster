@@ -4,7 +4,7 @@ export const SESSION_COOKIE_NAME = "hca_session";
 
 export type AuthSession = {
   userId: string;
-  email: string;
+  username: string;
   role: "HCA_ORGA" | "TEAM_REP";
   teamId?: string;
   displayName?: string;

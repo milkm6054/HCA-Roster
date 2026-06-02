@@ -52,7 +52,10 @@ export default async function RootLayout({
                         Matches
                       </Link>
                       <Link href="/admin/team-reps" className="hover:text-slate-900">
-                        Accounts
+                        Team Reps
+                      </Link>
+                      <Link href="/admin/orga-accounts" className="hover:text-slate-900">
+                        HCA Orga
                       </Link>
                     </>
                   ) : null}
