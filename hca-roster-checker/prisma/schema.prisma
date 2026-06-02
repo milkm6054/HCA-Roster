@@ -1,0 +1,157 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AccountAgeRisk {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+  UNKNOWN
+}
+
+enum RosterEntryStatus {
+  ACTIVE
+  REMOVED
+  PENDING
+}
+
+enum ViolationType {
+  DUPLICATE_ROSTER
+  INVALID_STEAM_ID
+  NEW_ACCOUNT
+  UNREGISTERED_PLAYER
+}
+
+enum ViolationSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum ViolationStatus {
+  OPEN
+  DISMISSED
+  CONFIRMED
+}
+
+model Team {
+  id               String        @id @default(cuid())
+  name             String        @unique
+  tag              String?
+  discordRoleId    String?
+  discordChannelId String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  rosterEntries    RosterEntry[]
+  matchesAsTeamA   Match[]       @relation("MatchTeamA")
+  matchesAsTeamB   Match[]       @relation("MatchTeamB")
+  matchPlayers     MatchPlayer[]
+  violations       Violation[]
+}
+
+model Player {
+  id                 String         @id @default(cuid())
+  steamId64          String         @unique
+  steamId3           String?
+  displayName        String?
+  estimatedCreatedAt DateTime?
+  accountAgeRisk     AccountAgeRisk @default(UNKNOWN)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  rosterEntries      RosterEntry[]
+  matchPlayers       MatchPlayer[]
+  violations         Violation[]
+}
+
+model RosterEntry {
+  id          String            @id @default(cuid())
+  teamId      String
+  playerId    String
+  season      String
+  status      RosterEntryStatus @default(ACTIVE)
+  submittedBy String?
+  submittedAt DateTime          @default(now())
+  lockedAt    DateTime?
+  team        Team              @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  player      Player            @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, playerId, season])
+  @@index([teamId, season, status])
+}
+
+model Match {
+  id           String        @id @default(cuid())
+  week         Int
+  teamAId      String
+  teamBId      String
+  playedAt     DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  teamA        Team          @relation("MatchTeamA", fields: [teamAId], references: [id], onDelete: Restrict)
+  teamB        Team          @relation("MatchTeamB", fields: [teamBId], references: [id], onDelete: Restrict)
+  matchPlayers MatchPlayer[]
+  violations   Violation[]
+
+  @@index([week])
+}
+
+model MatchPlayer {
+  id             String   @id @default(cuid())
+  matchId        String
+  teamId         String
+  playerId       String?
+  rawSteamId     String
+  steamId64      String?
+  kills          Int?
+  deaths         Int?
+  role           String?
+  sourceFileName String?
+  createdAt      DateTime @default(now())
+  match          Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  team           Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  player         Player?  @relation(fields: [playerId], references: [id], onDelete: SetNull)
+
+  @@index([matchId, teamId])
+  @@index([steamId64])
+}
+
+model Violation {
+  id        String            @id @default(cuid())
+  type      ViolationType
+  severity  ViolationSeverity
+  status    ViolationStatus   @default(OPEN)
+  teamId    String?
+  playerId  String?
+  matchId   String?
+  rawSteamId String?
+  details   Json
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+  team      Team?             @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  player    Player?           @relation(fields: [playerId], references: [id], onDelete: SetNull)
+  match     Match?            @relation(fields: [matchId], references: [id], onDelete: SetNull)
+
+  @@index([type, status])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  action     String
+  actor      String?
+  entityType String
+  entityId   String?
+  details    Json?
+  createdAt  DateTime @default(now())
+}
