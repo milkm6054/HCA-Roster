@@ -34,6 +34,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid credentials." }, { status: 401 });
   }
 
+  if (!user.username) {
+    return NextResponse.json(
+      { error: "Account is not yet migrated to username login. Contact an admin." },
+      { status: 400 },
+    );
+  }
+
   if (user.role === "TEAM_REP" && !user.teamId) {
     return NextResponse.json({ error: "Team representative account is missing team assignment." }, { status: 400 });
   }
