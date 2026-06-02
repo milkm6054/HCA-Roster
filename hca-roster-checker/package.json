@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "start:prod": "prisma migrate deploy && next start -H 0.0.0.0 -p ${PORT:-3000}",
+    "start:prod": "prisma db push && next start -H 0.0.0.0 -p ${PORT:-3000}",
     "lint": "eslint",
     "prisma:migrate": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
