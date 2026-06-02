@@ -35,6 +35,7 @@ export default function TeamDetailPage() {
   const teamId = params.teamId;
 
   const [season, setSeason] = useState("2026-S1");
+  const [role, setRole] = useState<"HCA_ORGA" | "TEAM_REP" | null>(null);
   const [team, setTeam] = useState<Team | null>(null);
   const [roster, setRoster] = useState<RosterEntry[]>([]);
   const [violations, setViolations] = useState<Violation[]>([]);
@@ -44,16 +45,19 @@ export default function TeamDetailPage() {
   const [uploadResult, setUploadResult] = useState<Record<string, unknown> | null>(null);
 
   async function refreshData() {
-    const [teamRes, rosterRes, validationRes] = await Promise.all([
+    const [meRes, teamRes, rosterRes, validationRes] = await Promise.all([
+      fetch(`/api/auth/me`),
       fetch(`/api/teams/${teamId}`),
       fetch(`/api/teams/${teamId}/roster?season=${encodeURIComponent(season)}`),
       fetch(`/api/teams/${teamId}/validation`),
     ]);
 
+    const meData = await meRes.json();
     const teamData = await teamRes.json();
     const rosterData = await rosterRes.json();
     const validationData = await validationRes.json();
 
+    setRole(meData.session?.role || null);
     setTeam(teamData.team || null);
     setRoster(rosterData.roster || []);
     setViolations(validationData.violations || []);
@@ -64,17 +68,20 @@ export default function TeamDetailPage() {
     if (!teamId) return;
 
     void (async () => {
-      const [teamRes, rosterRes, validationRes] = await Promise.all([
+      const [meRes, teamRes, rosterRes, validationRes] = await Promise.all([
+        fetch(`/api/auth/me`),
         fetch(`/api/teams/${teamId}`),
         fetch(`/api/teams/${teamId}/roster?season=${encodeURIComponent(season)}`),
         fetch(`/api/teams/${teamId}/validation`),
       ]);
 
+      const meData = await meRes.json();
       const teamData = await teamRes.json();
       const rosterData = await rosterRes.json();
       const validationData = await validationRes.json();
 
       if (active) {
+        setRole(meData.session?.role || null);
         setTeam(teamData.team || null);
         setRoster(rosterData.roster || []);
         setViolations(validationData.violations || []);
@@ -131,12 +138,16 @@ export default function TeamDetailPage() {
 
         <div className="flex items-center gap-2">
           <input value={season} onChange={(e) => setSeason(e.target.value)} placeholder="Season" />
-          <button className="bg-slate-900 px-4 py-2 text-white" onClick={lockRoster}>
-            Lock roster
-          </button>
-          <button className="bg-slate-700 px-4 py-2 text-white" onClick={unlockRoster}>
-            Unlock roster
-          </button>
+          {role === "HCA_ORGA" ? (
+            <>
+              <button className="bg-slate-900 px-4 py-2 text-white" onClick={lockRoster}>
+                Lock roster
+              </button>
+              <button className="bg-slate-700 px-4 py-2 text-white" onClick={unlockRoster}>
+                Unlock roster
+              </button>
+            </>
+          ) : null}
         </div>
       </div>
 

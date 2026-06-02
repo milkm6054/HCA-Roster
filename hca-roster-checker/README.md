@@ -21,20 +21,29 @@ Admin-first roster and match validation app for Hell Let Loose HCA tournaments.
 - Violation workflow (open, dismissed, confirmed)
 - Audit log records for major admin actions
 
+## Authentication and Roles
+
+The app supports exactly two login types:
+
+- `HCA_ORGA`: full access to every team, every violation, and match administration
+- `TEAM_REP`: can submit/manage only their team roster and can only view their own team violations
+
+Login page is available at `/login`.
+
 ## Setup
 
-1. Copy [.env.example](.env.example) to `.env` and set your PostgreSQL `DATABASE_URL`.
+1. Copy [.env.example](.env.example) to `.env` and set both `DATABASE_URL` and `AUTH_SECRET`.
 2. Install dependencies:
 
 ```bash
 npm install
 ```
 
-3. Generate Prisma client and run migrations:
+3. Generate Prisma client and push schema:
 
 ```bash
-npm run prisma:migrate
 npm run prisma:generate
+npx prisma db push
 ```
 
 4. Seed sample data:
@@ -42,6 +51,13 @@ npm run prisma:generate
 ```bash
 npm run seed
 ```
+
+Seed includes default login accounts:
+
+- HCA ORGA: `orga@hca.local` / `ChangeMeNow123!`
+- Team Rep: `rep@hca.local` / `ChangeMeNow123!`
+
+Change these passwords immediately outside local development.
 
 5. Start the app:
 
@@ -57,9 +73,11 @@ Open `http://localhost:3000`.
 - `npm run build`
 - `npm run lint`
 - `npm run prisma:migrate`
+- `npm run prisma:migrate:deploy`
 - `npm run prisma:studio`
 - `npm run prisma:generate`
 - `npm run seed`
+- `npm run start:prod`
 
 ## Discord Notes
 
@@ -87,13 +105,14 @@ Use this flow when [HCA-Roster/hca-roster-checker](.) is already its own reposit
 5. Configure service environment variables:
 	- Open the web service -> `Variables`.
 	- Add `DATABASE_URL` and set it to `${{Postgres.DATABASE_URL}}` by selecting the Postgres reference variable in Railway UI.
+	- Add `AUTH_SECRET` and use a long random secret.
 	- Optional: add `NODE_ENV=production`.
 
 6. Configure deploy/start commands in service `Settings`:
 	- Build Command: `npm run build`
 	- Start Command: `npm run start:prod`
 
-	`start:prod` runs `prisma migrate deploy` before `next start` so schema changes apply automatically.
+	`start:prod` runs `prisma db push` before `next start` so schema changes apply automatically.
 
 7. Trigger first deploy:
 	- Go to `Deployments` and click `Deploy` (or push a commit).
@@ -105,7 +124,7 @@ Use this flow when [HCA-Roster/hca-roster-checker](.) is already its own reposit
 
 9. Verify app health:
 	- Open the generated URL.
-	- Visit `/dashboard`, `/teams`, and `/matches`.
+	- Visit `/dashboard`, `/teams`, and `/violations`.
 
 10. Seed sample data (optional, one-time):
 	 - In Railway web service, open a shell/terminal session.
@@ -114,4 +133,4 @@ Use this flow when [HCA-Roster/hca-roster-checker](.) is already its own reposit
 ### Notes
 
 - If you use preview environments, ensure each environment is linked to a Postgres instance and has `DATABASE_URL` set.
-- `npm run start:prod` is safe to run repeatedly; `prisma migrate deploy` applies only pending migrations.
+- `npm run start:prod` is safe to run repeatedly; `prisma db push` updates the schema to match Prisma models.

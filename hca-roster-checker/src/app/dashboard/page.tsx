@@ -1,13 +1,46 @@
 import { prisma } from "@/lib/prisma";
+import { getServerSession } from "@/lib/auth/serverSession";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
+  const session = await getServerSession();
+
+  if (!session) {
+    return null;
+  }
+
+  const repTeamFilter = session.role === "TEAM_REP" ? { id: session.teamId } : undefined;
+  const repRosterFilter = session.role === "TEAM_REP" ? { teamId: session.teamId } : undefined;
+
   const [totalTeams, totalPlayers, openViolations, lockedRosters] = await Promise.all([
-    prisma.team.count(),
-    prisma.player.count(),
-    prisma.violation.count({ where: { status: "OPEN" } }),
-    prisma.rosterEntry.count({ where: { status: "ACTIVE", lockedAt: { not: null } } }),
+    prisma.team.count({ where: repTeamFilter }),
+    prisma.player.count({
+      where:
+        session.role === "TEAM_REP"
+          ? {
+              rosterEntries: {
+                some: {
+                  teamId: session.teamId,
+                  status: "ACTIVE",
+                },
+              },
+            }
+          : undefined,
+    }),
+    prisma.violation.count({
+      where: {
+        status: "OPEN",
+        teamId: session.role === "TEAM_REP" ? session.teamId : undefined,
+      },
+    }),
+    prisma.rosterEntry.count({
+      where: {
+        status: "ACTIVE",
+        lockedAt: { not: null },
+        ...repRosterFilter,
+      },
+    }),
   ]);
 
   const cards = [

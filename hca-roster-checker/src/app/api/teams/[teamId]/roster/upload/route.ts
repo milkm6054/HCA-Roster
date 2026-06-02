@@ -1,6 +1,7 @@
 import { Prisma, ViolationSeverity, ViolationStatus, ViolationType } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { createAuditLog } from "@/lib/audit/auditLog";
+import { canAccessTeam, requireApiSession } from "@/lib/auth/guards";
 import { getActor } from "@/lib/auth/getActor";
 import { queueNotification } from "@/lib/notifications/notifications";
 import { prisma } from "@/lib/prisma";
@@ -13,7 +14,14 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ teamId: string }> },
 ) {
+  const auth = await requireApiSession(request);
+  if (!auth.ok) return auth.response;
+
   const { teamId } = await params;
+  if (!canAccessTeam(auth.session, teamId)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const { searchParams } = new URL(request.url);
   const season = searchParams.get("season") || "2026-S1";
 
@@ -37,7 +45,7 @@ export async function POST(
     }
   }
 
-  const actor = await getActor();
+  const actor = await getActor(request);
   let acceptedPlayers = 0;
 
   await prisma.$transaction(async (tx) => {

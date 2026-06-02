@@ -1,8 +1,12 @@
 import { ViolationStatus, ViolationType } from "@prisma/client";
 import { NextResponse } from "next/server";
+import { isOrga, requireApiSession } from "@/lib/auth/guards";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: Request) {
+  const auth = await requireApiSession(request);
+  if (!auth.ok) return auth.response;
+
   const { searchParams } = new URL(request.url);
   const type = searchParams.get("type");
   const status = searchParams.get("status");
@@ -21,6 +25,7 @@ export async function GET(request: Request) {
     where: {
       type: violationType,
       status: violationStatus,
+      teamId: isOrga(auth.session) ? undefined : (auth.session.teamId ?? "__no_team__"),
     },
     include: {
       team: true,

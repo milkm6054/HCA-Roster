@@ -1,6 +1,11 @@
-import { headers } from "next/headers";
+import { getSessionFromRequest } from "@/lib/auth/session";
 
-export async function getActor(): Promise<string> {
-  const requestHeaders = await headers();
-  return requestHeaders.get("x-actor") || "local-admin";
+export async function getActor(request: Request): Promise<string> {
+  const session = await getSessionFromRequest(request);
+
+  if (!session) {
+    return "anonymous";
+  }
+
+  return `${session.email} (${session.role})`;
 }

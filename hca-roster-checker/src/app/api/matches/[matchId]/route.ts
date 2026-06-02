@@ -1,10 +1,17 @@
 import { NextResponse } from "next/server";
+import { isOrga, requireApiSession } from "@/lib/auth/guards";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ matchId: string }> },
 ) {
+  const auth = await requireApiSession(_request);
+  if (!auth.ok) return auth.response;
+  if (!isOrga(auth.session)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const { matchId } = await params;
 
   const match = await prisma.match.findUnique({

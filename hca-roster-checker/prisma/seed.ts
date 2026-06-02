@@ -1,10 +1,12 @@
 import {
   AccountAgeRisk,
   RosterEntryStatus,
+  UserRole,
   ViolationSeverity,
   ViolationStatus,
   ViolationType,
 } from "@prisma/client";
+import bcrypt from "bcryptjs";
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
@@ -16,6 +18,7 @@ async function main() {
   await prisma.violation.deleteMany();
   await prisma.rosterEntry.deleteMany();
   await prisma.match.deleteMany();
+  await prisma.user.deleteMany();
   await prisma.player.deleteMany();
   await prisma.team.deleteMany();
   await prisma.auditLog.deleteMany();
@@ -111,7 +114,30 @@ async function main() {
     ],
   });
 
+  const passwordHash = await bcrypt.hash("ChangeMeNow123!", 10);
+
+  await prisma.user.createMany({
+    data: [
+      {
+        email: "orga@hca.local",
+        passwordHash,
+        displayName: "HCA Admin",
+        role: UserRole.HCA_ORGA,
+      },
+      {
+        email: "rep@hca.local",
+        passwordHash,
+        displayName: "Team Rep",
+        role: UserRole.TEAM_REP,
+        teamId: teamA.id,
+      },
+    ],
+  });
+
   console.log("Seed complete.");
+  console.log("Default logins:");
+  console.log("- HCA ORGA: orga@hca.local / ChangeMeNow123!");
+  console.log("- Team Rep: rep@hca.local / ChangeMeNow123!");
 }
 
 main()

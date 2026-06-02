@@ -22,6 +22,7 @@ const typeOptions = [
 ] as const;
 
 export default function ViolationsPage() {
+  const [role, setRole] = useState<"HCA_ORGA" | "TEAM_REP" | null>(null);
   const [type, setType] = useState<(typeof typeOptions)[number]>("");
   const [status, setStatus] = useState<(typeof statusOptions)[number]>("");
   const [violations, setViolations] = useState<Violation[]>([]);
@@ -43,9 +44,14 @@ export default function ViolationsPage() {
     let active = true;
 
     void (async () => {
-      const res = await fetch(`/api/violations${query ? `?${query}` : ""}`);
+      const [meRes, res] = await Promise.all([
+        fetch("/api/auth/me"),
+        fetch(`/api/violations${query ? `?${query}` : ""}`),
+      ]);
+      const meData = await meRes.json();
       const data = await res.json();
       if (active) {
+        setRole(meData.session?.role || null);
         setViolations(data.violations || []);
       }
     })();
@@ -117,20 +123,26 @@ export default function ViolationsPage() {
                 </td>
                 <td className="px-4 py-3">{violation.status}</td>
                 <td className="space-x-2 px-4 py-3">
-                  <button
-                    className="bg-slate-700 px-2 py-1 text-xs text-white"
-                    onClick={() => setViolationStatus(violation.id, "DISMISSED")}
-                    disabled={violation.status === "DISMISSED"}
-                  >
-                    Dismiss
-                  </button>
-                  <button
-                    className="bg-slate-900 px-2 py-1 text-xs text-white"
-                    onClick={() => setViolationStatus(violation.id, "CONFIRMED")}
-                    disabled={violation.status === "CONFIRMED"}
-                  >
-                    Confirm
-                  </button>
+                  {role === "HCA_ORGA" ? (
+                    <>
+                      <button
+                        className="bg-slate-700 px-2 py-1 text-xs text-white"
+                        onClick={() => setViolationStatus(violation.id, "DISMISSED")}
+                        disabled={violation.status === "DISMISSED"}
+                      >
+                        Dismiss
+                      </button>
+                      <button
+                        className="bg-slate-900 px-2 py-1 text-xs text-white"
+                        onClick={() => setViolationStatus(violation.id, "CONFIRMED")}
+                        disabled={violation.status === "CONFIRMED"}
+                      >
+                        Confirm
+                      </button>
+                    </>
+                  ) : (
+                    <span className="text-xs text-slate-500">Read only</span>
+                  )}
                 </td>
               </tr>
             ))}

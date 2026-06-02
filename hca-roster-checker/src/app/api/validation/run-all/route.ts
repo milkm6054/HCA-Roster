@@ -1,9 +1,16 @@
 import { Prisma, ViolationSeverity, ViolationStatus, ViolationType } from "@prisma/client";
 import { NextResponse } from "next/server";
+import { isOrga, requireApiSession } from "@/lib/auth/guards";
 import { prisma } from "@/lib/prisma";
 import { estimateSteamAccountCreatedAt } from "@/lib/steam/accountAge";
 
 export async function POST(request: Request) {
+  const auth = await requireApiSession(request);
+  if (!auth.ok) return auth.response;
+  if (!isOrga(auth.session)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const { searchParams } = new URL(request.url);
   const season = searchParams.get("season") || "2026-S1";
 

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAuditLog } from "@/lib/audit/auditLog";
+import { isOrga, requireApiSession } from "@/lib/auth/guards";
 import { getActor } from "@/lib/auth/getActor";
 import { readCsvFromRequest } from "@/lib/http/readCsvFromRequest";
 import { checkMatchRoster } from "@/lib/matches/checkMatchRoster";
@@ -10,6 +11,12 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ matchId: string }> },
 ) {
+  const auth = await requireApiSession(request);
+  if (!auth.ok) return auth.response;
+  if (!isOrga(auth.session)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const { matchId } = await params;
   const { csvText, sourceFileName } = await readCsvFromRequest(request);
 
@@ -27,7 +34,7 @@ export async function POST(
 
   await createAuditLog({
     action: "MATCH_STATS_UPLOADED",
-    actor: await getActor(),
+    actor: await getActor(request),
     entityType: "Match",
     entityId: matchId,
     details: {

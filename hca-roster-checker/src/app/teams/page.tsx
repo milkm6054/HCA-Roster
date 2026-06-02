@@ -15,6 +15,7 @@ type Team = {
 
 export default function TeamsPage() {
   const [teams, setTeams] = useState<Team[]>([]);
+  const [role, setRole] = useState<"HCA_ORGA" | "TEAM_REP" | null>(null);
   const [name, setName] = useState("");
   const [tag, setTag] = useState("");
   const [loading, setLoading] = useState(false);
@@ -29,9 +30,11 @@ export default function TeamsPage() {
     let active = true;
 
     void (async () => {
-      const res = await fetch("/api/teams");
+      const [meRes, res] = await Promise.all([fetch("/api/auth/me"), fetch("/api/teams")]);
+      const meData = await meRes.json();
       const data = await res.json();
       if (active) {
+        setRole(meData.session?.role || null);
         setTeams(data.teams || []);
       }
     })();
@@ -63,24 +66,26 @@ export default function TeamsPage() {
     <section className="space-y-6">
       <h1 className="text-2xl font-semibold tracking-tight">Teams</h1>
 
-      <form onSubmit={createTeam} className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 md:grid-cols-4">
-        <input
-          placeholder="Team name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          required
-        />
-        <input
-          placeholder="Tag (optional)"
-          value={tag}
-          onChange={(e) => setTag(e.target.value)}
-        />
-        <div className="md:col-span-2">
-          <button className="bg-slate-900 px-4 py-2 text-white" disabled={loading}>
-            {loading ? "Creating..." : "Create team"}
-          </button>
-        </div>
-      </form>
+      {role === "HCA_ORGA" ? (
+        <form onSubmit={createTeam} className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 md:grid-cols-4">
+          <input
+            placeholder="Team name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+          />
+          <input
+            placeholder="Tag (optional)"
+            value={tag}
+            onChange={(e) => setTag(e.target.value)}
+          />
+          <div className="md:col-span-2">
+            <button className="bg-slate-900 px-4 py-2 text-white" disabled={loading}>
+              {loading ? "Creating..." : "Create team"}
+            </button>
+          </div>
+        </form>
+      ) : null}
 
       <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
         <table className="w-full border-collapse text-left text-sm">

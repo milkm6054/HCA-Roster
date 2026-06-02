@@ -1,9 +1,16 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createAuditLog } from "@/lib/audit/auditLog";
+import { isOrga, requireApiSession } from "@/lib/auth/guards";
 import { getActor } from "@/lib/auth/getActor";
 
-export async function GET() {
+export async function GET(request: Request) {
+  const auth = await requireApiSession(request);
+  if (!auth.ok) return auth.response;
+  if (!isOrga(auth.session)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const matches = await prisma.match.findMany({
     orderBy: [{ week: "asc" }, { createdAt: "desc" }],
     include: {
@@ -22,6 +29,12 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const auth = await requireApiSession(request);
+  if (!auth.ok) return auth.response;
+  if (!isOrga(auth.session)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const body = (await request.json()) as {
     week?: number;
     teamAId?: string;
@@ -54,7 +67,7 @@ export async function POST(request: Request) {
 
   await createAuditLog({
     action: "MATCH_CREATED",
-    actor: await getActor(),
+    actor: await getActor(request),
     entityType: "Match",
     entityId: match.id,
   });
