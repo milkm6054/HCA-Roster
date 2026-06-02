@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
+import { LogoutButton } from "@/components/LogoutButton";
 import { getServerSession } from "@/lib/auth/serverSession";
+import { isRootOrga } from "@/lib/auth/rootAdmin";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -25,6 +27,7 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const session = await getServerSession();
+  const canSeeOrgaAccounts = session ? isRootOrga(session) : false;
 
   return (
     <html
@@ -54,9 +57,11 @@ export default async function RootLayout({
                       <Link href="/admin/team-reps" prefetch={false} className="hover:text-slate-900">
                         Team Reps
                       </Link>
-                      <Link href="/admin/orga-accounts" prefetch={false} className="hover:text-slate-900">
-                        HCA Orga
-                      </Link>
+                      {canSeeOrgaAccounts ? (
+                        <Link href="/admin/orga-accounts" prefetch={false} className="hover:text-slate-900">
+                          HCA Orga
+                        </Link>
+                      ) : null}
                     </>
                   ) : null}
                   <Link href="/violations" prefetch={false} className="hover:text-slate-900">
@@ -65,9 +70,7 @@ export default async function RootLayout({
                   <span className="text-xs text-slate-500">
                     {session.role === "HCA_ORGA" ? "HCA ORGA" : "Team Rep"}
                   </span>
-                  <Link href="/api/auth/logout" className="border border-slate-300 bg-white px-3 py-1 text-xs">
-                    Logout
-                  </Link>
+                  <LogoutButton />
                 </nav>
               ) : null}
             </div>

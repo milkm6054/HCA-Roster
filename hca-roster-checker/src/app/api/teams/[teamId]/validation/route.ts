@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { canAccessTeam, requireApiSession } from "@/lib/auth/guards";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ teamId: string }> },

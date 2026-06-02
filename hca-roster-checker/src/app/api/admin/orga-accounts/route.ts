@@ -5,6 +5,8 @@ import { isOrga, requireApiSession } from "@/lib/auth/guards";
 import { isRootOrga } from "@/lib/auth/rootAdmin";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: Request) {
   const auth = await requireApiSession(request);
   if (!auth.ok) return auth.response;

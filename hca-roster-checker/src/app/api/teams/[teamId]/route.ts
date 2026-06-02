@@ -4,6 +4,8 @@ import { createAuditLog } from "@/lib/audit/auditLog";
 import { canAccessTeam, isOrga, requireApiSession } from "@/lib/auth/guards";
 import { getActor } from "@/lib/auth/getActor";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ teamId: string }> },

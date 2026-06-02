@@ -16,6 +16,14 @@ function withClearedCookie(response: NextResponse): NextResponse {
 }
 
 export async function GET(request: Request) {
+  const isPrefetch =
+    request.headers.get("purpose") === "prefetch" ||
+    request.headers.get("next-router-prefetch") !== null;
+
+  if (isPrefetch) {
+    return NextResponse.json({ ok: true, prefetched: true });
+  }
+
   const response = NextResponse.redirect(new URL("/login", request.url));
   return withClearedCookie(response);
 }
