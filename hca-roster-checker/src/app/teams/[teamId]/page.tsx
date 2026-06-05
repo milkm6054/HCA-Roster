@@ -50,6 +50,13 @@ type GamespassMember = {
 type RosterSortKey = "steamId64" | "displayName" | "submittedAt";
 type RosterSortDirection = "asc" | "desc";
 
+const SAMPLE_ROSTER_CSV = [
+  "steam_id,display_name",
+  "76561198000000001,SampleCaptain",
+  "[U:1:39734272],SampleSupport",
+  "STEAM_0:0:11101,SampleScout",
+].join("\n");
+
 function getConflictingTeams(details: unknown): string[] {
   if (!details || typeof details !== "object" || Array.isArray(details)) {
     return [];
@@ -254,6 +261,7 @@ export default function TeamDetailPage() {
 
   const canSubmitInitialRoster = role === "HCA_ORGA" || !hasSubmittedRoster;
   const normalizedMemberSearch = memberSearch.trim().toLowerCase();
+  const sampleRosterCsvHref = `data:text/csv;charset=utf-8,${encodeURIComponent(SAMPLE_ROSTER_CSV)}`;
   const filteredRoster = roster.filter((entry) => {
     if (!normalizedMemberSearch) {
       return true;
@@ -353,7 +361,19 @@ export default function TeamDetailPage() {
       {canSubmitInitialRoster ? (
         <form onSubmit={uploadRoster} className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
           <h2 className="text-lg font-semibold">Initial roster submission</h2>
-          <p className="text-xs text-slate-500">Expected headers: steam_id, display_name (optional)</p>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-xs text-slate-500">Expected headers: steam_id, display_name (optional)</p>
+            <a
+              href={sampleRosterCsvHref}
+              download="roster-template-example.csv"
+              className="text-xs text-slate-700 underline underline-offset-4"
+            >
+              Download example CSV
+            </a>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            <pre className="overflow-x-auto whitespace-pre-wrap">{SAMPLE_ROSTER_CSV}</pre>
+          </div>
           <textarea
             className="h-40 w-full"
             value={csvText}

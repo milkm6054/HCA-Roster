@@ -42,52 +42,96 @@ export async function POST(
   const actor = await getActor(request);
   const age = estimateSteamAccountCreatedAt(normalized.steamId64);
 
-  const { player, rosterEntry } = await prisma.$transaction(async (tx) => {
-    const upsertedPlayer = await tx.player.upsert({
-      where: { steamId64: normalized.steamId64 },
-      create: {
-        steamId64: normalized.steamId64,
-        steamId3: normalized.steamId3,
-        displayName,
-        estimatedCreatedAt: age.estimatedCreatedAt,
-        accountAgeRisk: age.accountAgeRisk,
-      },
-      update: {
-        steamId3: normalized.steamId3,
-        displayName: displayName || undefined,
-        estimatedCreatedAt: age.estimatedCreatedAt,
-        accountAgeRisk: age.accountAgeRisk,
-      },
-    });
+  let player;
+  let rosterEntry;
 
-    const upsertedEntry = await tx.rosterEntry.upsert({
-      where: {
-        teamId_playerId_season: {
+  try {
+    ({ player, rosterEntry } = await prisma.$transaction(async (tx) => {
+      const existingPlayer = await tx.player.findUnique({
+        where: { steamId64: normalized.steamId64 },
+        include: {
+          rosterEntries: {
+            where: {
+              season,
+              status: "ACTIVE",
+            },
+            include: {
+              team: {
+                select: {
+                  name: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      const activeEntries = existingPlayer?.rosterEntries || [];
+      const existingEntryOnThisTeam = activeEntries.find((entry) => entry.teamId === teamId);
+      const conflictingEntries = activeEntries.filter((entry) => entry.teamId !== teamId);
+      const memberName = displayName || existingPlayer?.displayName || steamIdInput;
+
+      if (existingEntryOnThisTeam) {
+        throw new Error(`${memberName} is already part of this team.`);
+      }
+
+      if (conflictingEntries.length > 0) {
+        const conflictingTeamNames = conflictingEntries.map((entry) => entry.team.name).join(", ");
+        throw new Error(`${memberName} is already part of ${conflictingTeamNames}.`);
+      }
+
+      const upsertedPlayer = await tx.player.upsert({
+        where: { steamId64: normalized.steamId64 },
+        create: {
+          steamId64: normalized.steamId64,
+          steamId3: normalized.steamId3,
+          displayName,
+          estimatedCreatedAt: age.estimatedCreatedAt,
+          accountAgeRisk: age.accountAgeRisk,
+        },
+        update: {
+          steamId3: normalized.steamId3,
+          displayName: displayName || undefined,
+          estimatedCreatedAt: age.estimatedCreatedAt,
+          accountAgeRisk: age.accountAgeRisk,
+        },
+      });
+
+      const upsertedEntry = await tx.rosterEntry.upsert({
+        where: {
+          teamId_playerId_season: {
+            teamId,
+            playerId: upsertedPlayer.id,
+            season,
+          },
+        },
+        create: {
           teamId,
           playerId: upsertedPlayer.id,
           season,
+          status: "ACTIVE",
+          submittedBy: actor,
+          submittedAt: new Date(),
+          lockedAt: null,
         },
-      },
-      create: {
-        teamId,
-        playerId: upsertedPlayer.id,
-        season,
-        status: "ACTIVE",
-        submittedBy: actor,
-        submittedAt: new Date(),
-        lockedAt: null,
-      },
-      update: {
-        status: "ACTIVE",
-        submittedBy: actor,
-        submittedAt: new Date(),
-        lockedAt: null,
-      },
-      include: { player: true },
-    });
+        update: {
+          status: "ACTIVE",
+          submittedBy: actor,
+          submittedAt: new Date(),
+          lockedAt: null,
+        },
+        include: { player: true },
+      });
 
-    return { player: upsertedPlayer, rosterEntry: upsertedEntry };
-  });
+      return { player: upsertedPlayer, rosterEntry: upsertedEntry };
+    }));
+  } catch (error) {
+    if (error instanceof Error) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
+
+    throw error;
+  }
 
   await createAuditLog({
     action: "ROSTER_PLAYER_ADDED",
