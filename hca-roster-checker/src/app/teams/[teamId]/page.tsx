@@ -47,6 +47,29 @@ type GamespassMember = {
   rowNumber?: number | null;
 };
 
+type RosterSortKey = "steamId64" | "displayName" | "submittedAt";
+type RosterSortDirection = "asc" | "desc";
+
+function getConflictingTeams(details: unknown): string[] {
+  if (!details || typeof details !== "object" || Array.isArray(details)) {
+    return [];
+  }
+
+  const detailRecord = details as Record<string, unknown>;
+  const directTeams = Array.isArray(detailRecord.conflictingTeamNames)
+    ? detailRecord.conflictingTeamNames
+    : [];
+  const issueRecord =
+    detailRecord.issue && typeof detailRecord.issue === "object" && !Array.isArray(detailRecord.issue)
+      ? (detailRecord.issue as Record<string, unknown>)
+      : null;
+  const nestedTeams = Array.isArray(issueRecord?.conflictingTeams) ? issueRecord.conflictingTeams : [];
+
+  return [...directTeams, ...nestedTeams]
+    .filter((team): team is string => typeof team === "string" && team.trim().length > 0)
+    .filter((team, index, list) => list.findIndex((candidate) => candidate === team) === index);
+}
+
 export default function TeamDetailPage() {
   const params = useParams<{ teamId: string }>();
   const teamId = params.teamId;
@@ -67,6 +90,9 @@ export default function TeamDetailPage() {
   const [addDisplayName, setAddDisplayName] = useState("");
   const [busyAction, setBusyAction] = useState(false);
   const [error, setError] = useState("");
+  const [memberSearch, setMemberSearch] = useState("");
+  const [rosterSortKey, setRosterSortKey] = useState<RosterSortKey>("submittedAt");
+  const [rosterSortDirection, setRosterSortDirection] = useState<RosterSortDirection>("desc");
 
   async function refreshData() {
     const [meRes, teamRes, rosterRes, validationRes] = await Promise.all([
@@ -216,7 +242,41 @@ export default function TeamDetailPage() {
     await refreshData();
   }
 
+  function toggleRosterSort(nextKey: RosterSortKey) {
+    if (rosterSortKey === nextKey) {
+      setRosterSortDirection((current) => (current === "asc" ? "desc" : "asc"));
+      return;
+    }
+
+    setRosterSortKey(nextKey);
+    setRosterSortDirection(nextKey === "submittedAt" ? "desc" : "asc");
+  }
+
   const canSubmitInitialRoster = role === "HCA_ORGA" || !hasSubmittedRoster;
+  const normalizedMemberSearch = memberSearch.trim().toLowerCase();
+  const filteredRoster = roster.filter((entry) => {
+    if (!normalizedMemberSearch) {
+      return true;
+    }
+
+    return (
+      entry.player.steamId64.toLowerCase().includes(normalizedMemberSearch) ||
+      (entry.player.displayName || "").toLowerCase().includes(normalizedMemberSearch)
+    );
+  });
+  const sortedRoster = [...filteredRoster].sort((left, right) => {
+    let comparison = 0;
+
+    if (rosterSortKey === "steamId64") {
+      comparison = left.player.steamId64.localeCompare(right.player.steamId64);
+    } else if (rosterSortKey === "displayName") {
+      comparison = (left.player.displayName || "").localeCompare(right.player.displayName || "");
+    } else {
+      comparison = new Date(left.submittedAt).getTime() - new Date(right.submittedAt).getTime();
+    }
+
+    return rosterSortDirection === "asc" ? comparison : comparison * -1;
+  });
 
   return (
     <section className="space-y-6">
@@ -259,6 +319,7 @@ export default function TeamDetailPage() {
                 <tr>
                   <th className="px-4 py-3">Type</th>
                   <th className="px-4 py-3">Player</th>
+                  <th className="px-4 py-3">Conflicting teams</th>
                   <th className="px-4 py-3">Severity</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">Steam ID</th>
@@ -266,16 +327,23 @@ export default function TeamDetailPage() {
                 </tr>
               </thead>
               <tbody>
-                {violations.map((issue) => (
-                  <tr key={issue.id} className="border-t border-amber-100">
-                    <td className="px-4 py-3 font-medium text-amber-950">{issue.type}</td>
-                    <td className="px-4 py-3">{issue.player?.displayName || "-"}</td>
-                    <td className="px-4 py-3">{issue.severity}</td>
-                    <td className="px-4 py-3">{issue.status}</td>
-                    <td className="px-4 py-3 font-mono text-xs">{issue.rawSteamId || "-"}</td>
-                    <td className="px-4 py-3">{new Date(issue.createdAt).toLocaleString()}</td>
-                  </tr>
-                ))}
+                {violations.map((issue) => {
+                  const conflictingTeams = getConflictingTeams(issue.details);
+
+                  return (
+                    <tr key={issue.id} className="border-t border-amber-100">
+                      <td className="px-4 py-3 font-medium text-amber-950">{issue.type}</td>
+                      <td className="px-4 py-3">{issue.player?.displayName || "-"}</td>
+                      <td className="px-4 py-3">
+                        {conflictingTeams.length > 0 ? conflictingTeams.join(", ") : "-"}
+                      </td>
+                      <td className="px-4 py-3">{issue.severity}</td>
+                      <td className="px-4 py-3">{issue.status}</td>
+                      <td className="px-4 py-3 font-mono text-xs">{issue.rawSteamId || "-"}</td>
+                      <td className="px-4 py-3">{new Date(issue.createdAt).toLocaleString()}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -331,19 +399,42 @@ export default function TeamDetailPage() {
         </div>
       ) : null}
 
-      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+      <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold">Members</h2>
+          <input
+            value={memberSearch}
+            onChange={(e) => setMemberSearch(e.target.value)}
+            placeholder="Search by Steam ID or name"
+            className="w-full sm:w-72"
+          />
+        </div>
+
+        <div className="overflow-hidden rounded-lg border border-slate-200">
         <table className="w-full border-collapse text-left text-sm">
           <thead className="bg-slate-50">
             <tr>
-              <th className="px-4 py-3">SteamID64</th>
+              <th className="px-4 py-3">
+                <button type="button" className="border-0 px-0 py-0 font-inherit text-inherit" onClick={() => toggleRosterSort("steamId64")}>
+                  SteamID64 {rosterSortKey === "steamId64" ? (rosterSortDirection === "asc" ? "▲" : "▼") : ""}
+                </button>
+              </th>
               <th className="px-4 py-3">Steam profile</th>
-              <th className="px-4 py-3">Name</th>
-              <th className="px-4 py-3">Submitted</th>
+              <th className="px-4 py-3">
+                <button type="button" className="border-0 px-0 py-0 font-inherit text-inherit" onClick={() => toggleRosterSort("displayName")}>
+                  Name {rosterSortKey === "displayName" ? (rosterSortDirection === "asc" ? "▲" : "▼") : ""}
+                </button>
+              </th>
+              <th className="px-4 py-3">
+                <button type="button" className="border-0 px-0 py-0 font-inherit text-inherit" onClick={() => toggleRosterSort("submittedAt")}>
+                  Submitted {rosterSortKey === "submittedAt" ? (rosterSortDirection === "asc" ? "▲" : "▼") : ""}
+                </button>
+              </th>
               <th className="px-4 py-3">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {roster.map((entry) => (
+            {sortedRoster.map((entry) => (
               <tr key={entry.id} className="border-t border-slate-100">
                 <td className="px-4 py-3 font-mono text-xs">{entry.player.steamId64}</td>
                 <td className="px-4 py-3 text-xs">
@@ -370,16 +461,17 @@ export default function TeamDetailPage() {
                 </td>
               </tr>
             ))}
-            {roster.length === 0 ? (
+            {sortedRoster.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-4 py-6 text-center text-slate-500">
-                  No active players on this roster yet.
+                  {roster.length === 0 ? "No active players on this roster yet." : "No players match that search."}
                 </td>
               </tr>
             ) : null}
           </tbody>
         </table>
-      </div>
+        </div>
+      </section>
 
       <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
         <h2 className="text-lg font-semibold">Roster activity log</h2>
