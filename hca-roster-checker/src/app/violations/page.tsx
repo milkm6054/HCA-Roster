@@ -17,7 +17,6 @@ const typeOptions = [
   "",
   "DUPLICATE_ROSTER",
   "INVALID_STEAM_ID",
-  "NEW_ACCOUNT",
   "UNREGISTERED_PLAYER",
 ] as const;
 

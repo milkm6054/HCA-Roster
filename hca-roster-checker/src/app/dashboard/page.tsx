@@ -31,6 +31,9 @@ export default async function DashboardPage() {
     prisma.violation.count({
       where: {
         status: "OPEN",
+        NOT: {
+          type: "NEW_ACCOUNT",
+        },
         teamId: session.role === "TEAM_REP" ? session.teamId : undefined,
       },
     }),

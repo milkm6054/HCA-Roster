@@ -1,6 +1,7 @@
 export type ValidationIssue = {
   type:
     | "INVALID_STEAM_ID"
+    | "GAMESPASS_ID"
     | "DUPLICATE_IN_UPLOAD"
     | "DUPLICATE_ACROSS_TEAMS"
     | "NEW_ACCOUNT";

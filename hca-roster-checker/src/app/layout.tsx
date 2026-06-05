@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import { LogoutButton } from "@/components/LogoutButton";
+import { RerunViolationsButton } from "@/components/RerunViolationsButton";
 import { getServerSession } from "@/lib/auth/serverSession";
-import { isRootOrga } from "@/lib/auth/rootAdmin";
+import { getRootAdminUsername, isRootOrga } from "@/lib/auth/rootAdmin";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -28,6 +29,9 @@ export default async function RootLayout({
 }>) {
   const session = await getServerSession();
   const canSeeOrgaAccounts = session ? isRootOrga(session) : false;
+  const canRerunViolations =
+    session?.role === "HCA_ORGA" ||
+    session?.username.toLowerCase() === getRootAdminUsername().toLowerCase();
 
   return (
     <html
@@ -67,6 +71,7 @@ export default async function RootLayout({
                   <Link href="/violations" prefetch={false} className="hover:text-slate-900">
                     Violations
                   </Link>
+                  {canRerunViolations ? <RerunViolationsButton /> : null}
                   <span className="text-xs text-slate-500">
                     {session.role === "HCA_ORGA" ? "HCA ORGA" : "Team Rep"}
                   </span>

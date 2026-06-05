@@ -26,6 +26,11 @@ export function isValidSteamId64(value: string): boolean {
   return parsed >= STEAMID64_MIN;
 }
 
+export function isLikelyGamespassId(value: string): boolean {
+  const cleaned = value.trim();
+  return /^[a-f0-9]{32}$/i.test(cleaned);
+}
+
 export function normalizeSteamId(input: string): SteamNormalizationResult {
   const cleaned = input.trim();
 

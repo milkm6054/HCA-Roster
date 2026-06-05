@@ -1,8 +1,7 @@
-import { AccountAgeRisk, RosterEntryStatus } from "@prisma/client";
+import { RosterEntryStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { ParsedRosterRow } from "@/lib/rosters/parseRosterCsv";
-import { estimateSteamAccountCreatedAt } from "@/lib/steam/accountAge";
-import { normalizeSteamId } from "@/lib/steam/steamIds";
+import { isLikelyGamespassId, normalizeSteamId } from "@/lib/steam/steamIds";
 import type { RosterValidationResult, ValidationIssue } from "@/lib/types/validation";
 
 type ValidateRosterInput = {
@@ -21,14 +20,6 @@ export type ValidateRosterOutput = RosterValidationResult & {
   normalizedRows: NormalizedRosterRow[];
 };
 
-const riskToSeverity: Record<AccountAgeRisk, ValidationIssue["severity"]> = {
-  LOW: "LOW",
-  MEDIUM: "MEDIUM",
-  HIGH: "HIGH",
-  CRITICAL: "CRITICAL",
-  UNKNOWN: "LOW",
-};
-
 export async function validateRoster({
   teamId,
   season,
@@ -44,6 +35,17 @@ export async function validateRoster({
     const normalized = normalizeSteamId(row.steamId);
 
     if (!normalized.ok) {
+      if (isLikelyGamespassId(row.steamId)) {
+        issues.push({
+          type: "GAMESPASS_ID",
+          severity: "LOW",
+          steamIdInput: row.steamId,
+          message: "Gamespass ID detected; excluded from Steam-based violations.",
+          rowNumbers: [row.rowNumber],
+        });
+        continue;
+      }
+
       invalidRows += 1;
       issues.push({
         type: "INVALID_STEAM_ID",
@@ -120,20 +122,7 @@ export async function validateRoster({
     }
   }
 
-  for (const normalized of normalizedRows) {
-    const age = estimateSteamAccountCreatedAt(normalized.steamId64);
-
-    if (age.accountAgeRisk === AccountAgeRisk.MEDIUM || age.accountAgeRisk === AccountAgeRisk.HIGH || age.accountAgeRisk === AccountAgeRisk.CRITICAL) {
-      issues.push({
-        type: "NEW_ACCOUNT",
-        severity: riskToSeverity[age.accountAgeRisk],
-        steamIdInput: normalized.row.steamId,
-        steamId64: normalized.steamId64,
-        message: "Account is potentially too new based on placeholder account age check.",
-        rowNumbers: [normalized.row.rowNumber],
-      });
-    }
-  }
+  // NEW_ACCOUNT checks are intentionally disabled.
 
   return {
     validRows: rows.length - invalidRows,

@@ -38,6 +38,12 @@ type Violation = {
   createdAt: string;
 };
 
+type GamespassMember = {
+  id: string;
+  displayName?: string | null;
+  rowNumber?: number | null;
+};
+
 export default function TeamDetailPage() {
   const params = useParams<{ teamId: string }>();
   const teamId = params.teamId;
@@ -49,6 +55,7 @@ export default function TeamDetailPage() {
   const [hasSubmittedRoster, setHasSubmittedRoster] = useState(false);
   const [changes, setChanges] = useState<RosterChange[]>([]);
   const [violations, setViolations] = useState<Violation[]>([]);
+  const [gamespassMembers, setGamespassMembers] = useState<GamespassMember[]>([]);
 
   const [csvText, setCsvText] = useState("steam_id,display_name\n");
   const [file, setFile] = useState<File | null>(null);
@@ -76,6 +83,7 @@ export default function TeamDetailPage() {
     setRoster(rosterData.roster || []);
     setHasSubmittedRoster(Boolean(rosterData.hasSubmittedRoster));
     setChanges(rosterData.changes || []);
+    setGamespassMembers(rosterData.gamespassMembers || []);
     setViolations(validationData.violations || []);
   }
 
@@ -102,6 +110,7 @@ export default function TeamDetailPage() {
         setRoster(rosterData.roster || []);
         setHasSubmittedRoster(Boolean(rosterData.hasSubmittedRoster));
         setChanges(rosterData.changes || []);
+        setGamespassMembers(rosterData.gamespassMembers || []);
         setViolations(validationData.violations || []);
       }
     })();
@@ -388,6 +397,40 @@ export default function TeamDetailPage() {
           </tbody>
         </table>
       </div>
+
+      <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
+        <h2 className="text-lg font-semibold">Gamespass members</h2>
+        <p className="text-xs text-slate-500">
+          IDs detected as gamespass are excluded from Steam violation checks and listed here for reference.
+        </p>
+        <div className="overflow-hidden rounded-lg border border-slate-200">
+          <table className="w-full border-collapse text-left text-sm">
+            <thead className="bg-slate-50">
+              <tr>
+                <th className="px-4 py-3">ID</th>
+                <th className="px-4 py-3">Display name</th>
+                <th className="px-4 py-3">CSV row</th>
+              </tr>
+            </thead>
+            <tbody>
+              {gamespassMembers.map((member) => (
+                <tr key={`${member.id}-${member.rowNumber ?? "na"}`} className="border-t border-slate-100">
+                  <td className="px-4 py-3 font-mono text-xs">{member.id}</td>
+                  <td className="px-4 py-3">{member.displayName || "-"}</td>
+                  <td className="px-4 py-3">{member.rowNumber ?? "-"}</td>
+                </tr>
+              ))}
+              {gamespassMembers.length === 0 ? (
+                <tr>
+                  <td colSpan={3} className="px-4 py-6 text-center text-slate-500">
+                    No gamespass members detected for this season yet.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </section>
   );
 }

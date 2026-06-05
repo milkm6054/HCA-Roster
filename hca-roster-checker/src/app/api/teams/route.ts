@@ -21,7 +21,13 @@ export async function GET(request: Request) {
       _count: {
         select: {
           rosterEntries: true,
-          violations: true,
+          violations: {
+            where: {
+              NOT: {
+                type: "NEW_ACCOUNT",
+              },
+            },
+          },
         },
       },
     },

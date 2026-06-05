@@ -2,17 +2,27 @@ import { Prisma, ViolationSeverity, ViolationStatus, ViolationType } from "@pris
 import { NextResponse } from "next/server";
 import { isOrga, requireApiSession } from "@/lib/auth/guards";
 import { prisma } from "@/lib/prisma";
-import { estimateSteamAccountCreatedAt } from "@/lib/steam/accountAge";
+import { getRootAdminUsername } from "@/lib/auth/rootAdmin";
 
 export async function POST(request: Request) {
   const auth = await requireApiSession(request);
   if (!auth.ok) return auth.response;
-  if (!isOrga(auth.session)) {
+  const isRootByUsername = auth.session.username.toLowerCase() === getRootAdminUsername().toLowerCase();
+  if (!isOrga(auth.session) && !isRootByUsername) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const { searchParams } = new URL(request.url);
   const season = searchParams.get("season") || "2026-S1";
+
+  const deleted = await prisma.violation.deleteMany({
+    where: {
+      type: {
+        in: [ViolationType.DUPLICATE_ROSTER, ViolationType.NEW_ACCOUNT],
+      },
+      matchId: null,
+    },
+  });
 
   const entries = await prisma.rosterEntry.findMany({
     where: { season, status: "ACTIVE" },
@@ -54,34 +64,13 @@ export async function POST(request: Request) {
       }
     }
 
-    for (const entry of relatedEntries) {
-      const age = estimateSteamAccountCreatedAt(entry.player.steamId64);
-      if (age.accountAgeRisk === "LOW" || age.accountAgeRisk === "UNKNOWN") {
-        continue;
-      }
-
-      await prisma.violation.create({
-        data: {
-          type: ViolationType.NEW_ACCOUNT,
-          severity: age.accountAgeRisk as ViolationSeverity,
-          status: ViolationStatus.OPEN,
-          teamId: entry.teamId,
-          playerId: entry.playerId,
-          rawSteamId: steamId64,
-          details: {
-            season,
-            accountAgeRisk: age.accountAgeRisk,
-            estimatedCreatedAt: age.estimatedCreatedAt?.toISOString(),
-          } as Prisma.JsonObject,
-        },
-      });
-      violationsCreated += 1;
-    }
+    // NEW_ACCOUNT checks are intentionally disabled.
   }
 
   return NextResponse.json({
     season,
     activeRosterEntries: entries.length,
+    deletedViolations: deleted.count,
     violationsCreated,
   });
 }

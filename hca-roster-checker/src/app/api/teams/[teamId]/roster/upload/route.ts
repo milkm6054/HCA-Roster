@@ -53,6 +53,14 @@ export async function POST(
 
   const parsed = parseRosterCsv(csvText);
   const validation = await validateRoster({ teamId, season, rows: parsed.rows });
+  const gamespassMembers = validation.issues
+    .filter((issue) => issue.type === "GAMESPASS_ID")
+    .map((issue) => ({
+      id: issue.steamIdInput,
+      displayName:
+        parsed.rows.find((row) => row.rowNumber === issue.rowNumbers?.[0])?.displayName || null,
+      rowNumber: issue.rowNumbers?.[0] ?? null,
+    }));
 
   const uniqueRows = new Map<string, (typeof validation.normalizedRows)[number]>();
   for (const row of validation.normalizedRows) {
@@ -114,8 +122,7 @@ export async function POST(
       const shouldPersist =
         issue.type === "INVALID_STEAM_ID" ||
         issue.type === "DUPLICATE_IN_UPLOAD" ||
-        issue.type === "DUPLICATE_ACROSS_TEAMS" ||
-        issue.type === "NEW_ACCOUNT";
+        issue.type === "DUPLICATE_ACROSS_TEAMS";
 
       if (!shouldPersist) {
         continue;
@@ -126,9 +133,7 @@ export async function POST(
           type:
             issue.type === "INVALID_STEAM_ID"
               ? ViolationType.INVALID_STEAM_ID
-              : issue.type === "NEW_ACCOUNT"
-                ? ViolationType.NEW_ACCOUNT
-                : ViolationType.DUPLICATE_ROSTER,
+              : ViolationType.DUPLICATE_ROSTER,
           severity: issue.severity as ViolationSeverity,
           status: ViolationStatus.OPEN,
           teamId,
@@ -153,6 +158,7 @@ export async function POST(
       acceptedPlayers,
       invalidRows: validation.invalidRows,
       malformedRows: parsed.malformedRows.length,
+      gamespassMembers,
     },
   });
 
@@ -162,7 +168,7 @@ export async function POST(
       teamId,
       season,
       acceptedPlayers,
-      issueCount: validation.issues.length,
+      issueCount: validation.issues.filter((issue) => issue.type !== "GAMESPASS_ID").length,
     },
   });
 
@@ -175,5 +181,6 @@ export async function POST(
       invalidRows: validation.invalidRows,
       issues: validation.issues,
     },
+    gamespassMembers,
   });
 }

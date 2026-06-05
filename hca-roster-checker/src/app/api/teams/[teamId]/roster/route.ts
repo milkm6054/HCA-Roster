@@ -19,7 +19,7 @@ export async function GET(
   const { searchParams } = new URL(request.url);
   const season = searchParams.get("season") || "2026-S1";
 
-  const [roster, submittedEntriesCount, changeLogs] = await Promise.all([
+  const [roster, submittedEntriesCount, changeLogs, latestUploadLog] = await Promise.all([
     prisma.rosterEntry.findMany({
       where: {
         teamId,
@@ -53,6 +53,17 @@ export async function GET(
         createdAt: true,
       },
     }),
+    prisma.auditLog.findFirst({
+      where: {
+        entityType: "Team",
+        entityId: teamId,
+        action: "ROSTER_UPLOADED",
+      },
+      orderBy: [{ createdAt: "desc" }],
+      select: {
+        details: true,
+      },
+    }),
   ]);
 
   const changes = changeLogs
@@ -79,10 +90,33 @@ export async function GET(
     })
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
 
+  const uploadDetails =
+    latestUploadLog?.details &&
+    typeof latestUploadLog.details === "object" &&
+    !Array.isArray(latestUploadLog.details)
+      ? (latestUploadLog.details as Record<string, unknown>)
+      : null;
+  const uploadSeason = typeof uploadDetails?.season === "string" ? uploadDetails.season : null;
+  const gamespassMembers =
+    uploadSeason === season && Array.isArray(uploadDetails?.gamespassMembers)
+      ? uploadDetails.gamespassMembers
+          .filter((item): item is { id: string; displayName?: string | null; rowNumber?: number | null } => {
+            if (!item || typeof item !== "object" || Array.isArray(item)) return false;
+            const cast = item as Record<string, unknown>;
+            return typeof cast.id === "string";
+          })
+          .map((item) => ({
+            id: item.id,
+            displayName: item.displayName ?? null,
+            rowNumber: item.rowNumber ?? null,
+          }))
+      : [];
+
   return NextResponse.json({
     season,
     roster,
     hasSubmittedRoster: submittedEntriesCount > 0,
     changes,
+    gamespassMembers,
   });
 }

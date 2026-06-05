@@ -25,6 +25,9 @@ export async function GET(request: Request) {
 
   const violations = await prisma.violation.findMany({
     where: {
+      NOT: {
+        type: ViolationType.NEW_ACCOUNT,
+      },
       type: violationType,
       status: violationStatus,
       teamId: isOrga(auth.session) ? undefined : (auth.session.teamId ?? "__no_team__"),

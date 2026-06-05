@@ -21,7 +21,7 @@ export async function GET(
     where: {
       teamId,
       type: {
-        in: ["DUPLICATE_ROSTER", "INVALID_STEAM_ID", "NEW_ACCOUNT"],
+        in: ["DUPLICATE_ROSTER", "INVALID_STEAM_ID"],
       },
     },
     orderBy: { createdAt: "desc" },
