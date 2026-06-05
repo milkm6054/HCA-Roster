@@ -1,0 +1,2 @@
+ALTER TABLE "Team"
+ADD COLUMN IF NOT EXISTS "logoDataUrl" TEXT;

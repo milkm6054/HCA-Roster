@@ -7,6 +7,7 @@ type Team = {
   id: string;
   name: string;
   tag?: string | null;
+  logoDataUrl?: string | null;
 };
 
 type RosterEntry = {
@@ -55,6 +56,17 @@ const SAMPLE_ROSTER_CSV = [
   "76561198000000001,SampleCaptain",
 ].join("\n");
 
+function getInitials(label: string): string {
+  const initials = label
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || "")
+    .join("");
+
+  return initials || "N/A";
+}
+
 function getConflictingTeams(details: unknown): string[] {
   if (!details || typeof details !== "object" || Array.isArray(details)) {
     return [];
@@ -94,6 +106,7 @@ export default function TeamDetailPage() {
   const [addSteamId, setAddSteamId] = useState("");
   const [addDisplayName, setAddDisplayName] = useState("");
   const [busyAction, setBusyAction] = useState(false);
+  const [busyLogoAction, setBusyLogoAction] = useState(false);
   const [error, setError] = useState("");
   const [memberSearch, setMemberSearch] = useState("");
   const [rosterSortKey, setRosterSortKey] = useState<RosterSortKey>("submittedAt");
@@ -247,6 +260,58 @@ export default function TeamDetailPage() {
     await refreshData();
   }
 
+  async function updateTeamLogo(nextLogoDataUrl: string | null) {
+    setBusyLogoAction(true);
+    setError("");
+
+    try {
+      const res = await fetch(`/api/teams/${teamId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ logoDataUrl: nextLogoDataUrl }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Failed to update team logo.");
+        return;
+      }
+
+      setTeam(data.team || null);
+    } finally {
+      setBusyLogoAction(false);
+    }
+  }
+
+  async function uploadLogo(event: React.ChangeEvent<HTMLInputElement>) {
+    const selectedFile = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!selectedFile) {
+      return;
+    }
+
+    if (!selectedFile.type.startsWith("image/")) {
+      setError("Please choose an image file for the team logo.");
+      return;
+    }
+
+    const fileReader = new FileReader();
+    fileReader.onload = async () => {
+      const result = typeof fileReader.result === "string" ? fileReader.result : null;
+      if (!result) {
+        setError("Failed to read the selected logo file.");
+        return;
+      }
+
+      await updateTeamLogo(result);
+    };
+    fileReader.onerror = () => {
+      setError("Failed to read the selected logo file.");
+    };
+    fileReader.readAsDataURL(selectedFile);
+  }
+
   function toggleRosterSort(nextKey: RosterSortKey) {
     if (rosterSortKey === nextKey) {
       setRosterSortDirection((current) => (current === "asc" ? "desc" : "asc"));
@@ -305,6 +370,43 @@ export default function TeamDetailPage() {
           ) : null}
         </div>
       </div>
+
+      <section className="rounded-lg border border-slate-200 bg-white p-4">
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 text-lg font-semibold text-slate-500">
+            {team?.logoDataUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={team.logoDataUrl} alt={`${team.name} logo`} className="h-full w-full object-cover" />
+            ) : (
+              <span>{getInitials(team?.tag || team?.name || "N/A")}</span>
+            )}
+          </div>
+
+          <div className="min-w-[220px] flex-1 space-y-2">
+            <div>
+              <h2 className="text-lg font-semibold">Team logo</h2>
+              <p className="text-sm text-slate-500">
+                Upload a logo for your team. Teams without one show the default N/A mark.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="inline-flex cursor-pointer items-center rounded-xl border border-slate-200 bg-slate-900 px-4 py-2 text-sm text-white">
+                <span>{busyLogoAction ? "Uploading..." : "Upload logo"}</span>
+                <input type="file" accept="image/*" className="hidden" onChange={uploadLogo} disabled={busyLogoAction} />
+              </label>
+              <button
+                type="button"
+                className="bg-slate-700 px-4 py-2 text-white"
+                onClick={() => updateTeamLogo(null)}
+                disabled={busyLogoAction || !team?.logoDataUrl}
+              >
+                Clear logo
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <section className="space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-4">
         <div className="flex items-center justify-between gap-3">
@@ -434,18 +536,18 @@ export default function TeamDetailPage() {
             <tr>
               <th className="px-4 py-3">
                 <button type="button" className="border-0 px-0 py-0 font-inherit text-inherit" onClick={() => toggleRosterSort("steamId64")}>
-                  SteamID64 {rosterSortKey === "steamId64" ? (rosterSortDirection === "asc" ? "▲" : "▼") : ""}
+                  SteamID64 {rosterSortKey === "steamId64" ? (rosterSortDirection === "asc" ? "^" : "v") : ""}
                 </button>
               </th>
               <th className="px-4 py-3">Steam profile</th>
               <th className="px-4 py-3">
                 <button type="button" className="border-0 px-0 py-0 font-inherit text-inherit" onClick={() => toggleRosterSort("displayName")}>
-                  Name {rosterSortKey === "displayName" ? (rosterSortDirection === "asc" ? "▲" : "▼") : ""}
+                  Name {rosterSortKey === "displayName" ? (rosterSortDirection === "asc" ? "^" : "v") : ""}
                 </button>
               </th>
               <th className="px-4 py-3">
                 <button type="button" className="border-0 px-0 py-0 font-inherit text-inherit" onClick={() => toggleRosterSort("submittedAt")}>
-                  Submitted {rosterSortKey === "submittedAt" ? (rosterSortDirection === "asc" ? "▲" : "▼") : ""}
+                  Submitted {rosterSortKey === "submittedAt" ? (rosterSortDirection === "asc" ? "^" : "v") : ""}
                 </button>
               </th>
               <th className="px-4 py-3">Actions</th>

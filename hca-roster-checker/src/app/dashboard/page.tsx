@@ -4,6 +4,17 @@ import { isLikelyGamespassId } from "@/lib/steam/steamIds";
 
 export const dynamic = "force-dynamic";
 
+function getInitials(label: string): string {
+  const initials = label
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || "")
+    .join("");
+
+  return initials || "N/A";
+}
+
 export default async function DashboardPage() {
   const session = await getServerSession();
 
@@ -11,7 +22,7 @@ export default async function DashboardPage() {
     return null;
   }
 
-  const [totalTeams, totalRegisteredPlayers, yourPlayerTotal, teamRepContacts, teamName, playedMatches, teamViolations] = await Promise.all([
+  const [totalTeams, totalRegisteredPlayers, yourPlayerTotal, teamRepContacts, currentTeam, playedMatches, teamViolations, teamsForGraphic] = await Promise.all([
     prisma.team.count(),
     prisma.rosterEntry.count({
       where: {
@@ -44,7 +55,7 @@ export default async function DashboardPage() {
     session.role === "TEAM_REP" && session.teamId
       ? prisma.team.findUnique({
           where: { id: session.teamId },
-          select: { name: true },
+          select: { name: true, tag: true, logoDataUrl: true },
         })
       : Promise.resolve(null),
     session.role === "TEAM_REP" && session.teamId
@@ -71,6 +82,15 @@ export default async function DashboardPage() {
           },
         })
       : Promise.resolve([]),
+    prisma.team.findMany({
+      orderBy: { name: "asc" },
+      select: {
+        id: true,
+        name: true,
+        tag: true,
+        logoDataUrl: true,
+      },
+    }),
   ]);
 
   const filteredTeamViolations = teamViolations.filter(
@@ -99,9 +119,13 @@ export default async function DashboardPage() {
     <section className="space-y-6">
       <div className="surface-card p-6">
         <p className="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-500">Overview</p>
-        <h1 className="mt-3 text-3xl font-semibold tracking-tight">Tournament Dashboard</h1>
+        <h1 className="mt-3 text-3xl font-semibold tracking-tight">
+          {session.role === "TEAM_REP" ? `${currentTeam?.name || "Your Team"} Dashboard` : "Tournament Dashboard"}
+        </h1>
         <p className="mt-2 max-w-2xl text-sm muted-copy">
-          Live registration and validation overview for roster management across the competition.
+          {session.role === "TEAM_REP"
+            ? `Live registration and validation overview for ${currentTeam?.name || "your team"}.`
+            : "Live registration and validation overview for roster management across the competition."}
         </p>
       </div>
 
@@ -124,7 +148,7 @@ export default async function DashboardPage() {
         <section className="surface-card space-y-3 p-5">
           <h2 className="text-lg font-semibold tracking-tight">Your Team Reps</h2>
           <p className="text-sm muted-copy">
-            Team: {teamName?.name || "Unassigned"}
+            Team: {currentTeam?.name || "Unassigned"}
           </p>
           <ul className="space-y-2 text-sm">
             {teamRepContacts.map((rep) => (
@@ -141,6 +165,35 @@ export default async function DashboardPage() {
           </ul>
         </section>
       ) : null}
+
+      <section className="surface-card space-y-4 p-5">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-500">Teams</p>
+            <h2 className="mt-2 text-xl font-semibold tracking-tight">League graphic wall</h2>
+          </div>
+          <p className="text-sm muted-copy">Every registered team appears here. Logos update as teams upload them.</p>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {teamsForGraphic.map((team) => (
+            <div key={team.id} className="surface-card-soft flex items-center gap-3 px-4 py-3">
+              <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-white/6 text-sm font-semibold text-[var(--muted)]">
+                {team.logoDataUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={team.logoDataUrl} alt={`${team.name} logo`} className="h-full w-full object-cover" />
+                ) : (
+                  <span>{getInitials(team.tag || team.name || "N/A")}</span>
+                )}
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold">{team.name}</p>
+                <p className="text-xs muted-copy">{team.logoDataUrl ? (team.tag || "Custom logo") : "N/A Logo"}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
 
       <section className="gallery-quote" aria-label="Quote">
         <blockquote>

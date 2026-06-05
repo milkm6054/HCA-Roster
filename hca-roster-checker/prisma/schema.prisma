@@ -55,6 +55,7 @@ model Team {
   id               String        @id @default(cuid())
   name             String        @unique
   tag              String?
+  logoDataUrl      String?
   discordRoleId    String?
   discordChannelId String?
   createdAt        DateTime      @default(now())

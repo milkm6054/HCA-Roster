@@ -6,6 +6,28 @@ import { getActor } from "@/lib/auth/getActor";
 
 export const dynamic = "force-dynamic";
 
+function normalizeLogoDataUrl(input?: string | null): string | null {
+  if (input == null) {
+    return null;
+  }
+
+  const value = input.trim();
+  if (!value) {
+    return null;
+  }
+
+  const isSupportedDataUrl = /^data:image\/(?:png|jpeg|jpg|webp|svg\+xml);base64,[a-z0-9+/=\s]+$/i.test(value);
+  if (!isSupportedDataUrl) {
+    throw new Error("Logo must be a PNG, JPG, WEBP, or SVG image.");
+  }
+
+  if (value.length > 1_500_000) {
+    throw new Error("Logo image is too large. Please keep it under 1 MB.");
+  }
+
+  return value;
+}
+
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ teamId: string }> },
@@ -43,7 +65,7 @@ export async function PATCH(
 ) {
   const auth = await requireApiSession(request);
   if (!auth.ok) return auth.response;
-  if (!isOrga(auth.session)) {
+  if (!canAccessTeam(auth.session, (await params).teamId)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -54,16 +76,39 @@ export async function PATCH(
     tag?: string;
     discordRoleId?: string;
     discordChannelId?: string;
+    logoDataUrl?: string | null;
   };
+
+  const isTeamRep = !isOrga(auth.session);
+  const updateData: {
+    name?: string;
+    tag?: string | null;
+    discordRoleId?: string | null;
+    discordChannelId?: string | null;
+    logoDataUrl?: string | null;
+  } = {};
+
+  try {
+    if (body.logoDataUrl !== undefined) {
+      updateData.logoDataUrl = normalizeLogoDataUrl(body.logoDataUrl);
+    }
+  } catch (error) {
+    if (error instanceof Error) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    throw error;
+  }
+
+  if (!isTeamRep) {
+    updateData.name = body.name?.trim();
+    updateData.tag = body.tag?.trim() || null;
+    updateData.discordRoleId = body.discordRoleId?.trim() || null;
+    updateData.discordChannelId = body.discordChannelId?.trim() || null;
+  }
 
   const team = await prisma.team.update({
     where: { id: teamId },
-    data: {
-      name: body.name?.trim(),
-      tag: body.tag?.trim(),
-      discordRoleId: body.discordRoleId?.trim(),
-      discordChannelId: body.discordChannelId?.trim(),
-    },
+    data: updateData,
   });
 
   await createAuditLog({
@@ -71,6 +116,10 @@ export async function PATCH(
     actor: await getActor(request),
     entityType: "Team",
     entityId: team.id,
+    details: {
+      updatedLogo: body.logoDataUrl !== undefined,
+      updatedMetadata: !isTeamRep,
+    },
   });
 
   return NextResponse.json({ team });
