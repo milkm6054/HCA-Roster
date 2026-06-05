@@ -26,6 +26,7 @@ export async function GET(request: Request) {
       },
       violations: {
         where: {
+          status: "OPEN",
           NOT: {
             type: "NEW_ACCOUNT",
           },

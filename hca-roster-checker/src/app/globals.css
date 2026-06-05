@@ -202,3 +202,65 @@ button:disabled {
   background: linear-gradient(180deg, rgba(250, 204, 21, 0.16), rgba(250, 204, 21, 0.08));
   border-radius: 1.25rem;
 }
+
+html[data-theme="dark"] .bg-white,
+html[data-theme="dark"] .bg-slate-50,
+html[data-theme="dark"] .bg-amber-50 {
+  background-color: var(--panel) !important;
+}
+
+html[data-theme="dark"] .bg-amber-100\/70 {
+  background-color: rgba(250, 204, 21, 0.12) !important;
+}
+
+html[data-theme="dark"] .border-slate-100,
+html[data-theme="dark"] .border-slate-200,
+html[data-theme="dark"] .border-amber-100,
+html[data-theme="dark"] .border-amber-200,
+html[data-theme="dark"] .border-amber-300 {
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .text-slate-500,
+html[data-theme="dark"] .text-slate-600,
+html[data-theme="dark"] .text-amber-800,
+html[data-theme="dark"] .text-amber-900 {
+  color: var(--muted) !important;
+}
+
+html[data-theme="dark"] .text-slate-700,
+html[data-theme="dark"] .text-amber-950 {
+  color: var(--foreground) !important;
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]) .bg-white,
+  html:not([data-theme="light"]) .bg-slate-50,
+  html:not([data-theme="light"]) .bg-amber-50 {
+    background-color: var(--panel) !important;
+  }
+
+  html:not([data-theme="light"]) .bg-amber-100\/70 {
+    background-color: rgba(250, 204, 21, 0.12) !important;
+  }
+
+  html:not([data-theme="light"]) .border-slate-100,
+  html:not([data-theme="light"]) .border-slate-200,
+  html:not([data-theme="light"]) .border-amber-100,
+  html:not([data-theme="light"]) .border-amber-200,
+  html:not([data-theme="light"]) .border-amber-300 {
+    border-color: var(--border) !important;
+  }
+
+  html:not([data-theme="light"]) .text-slate-500,
+  html:not([data-theme="light"]) .text-slate-600,
+  html:not([data-theme="light"]) .text-amber-800,
+  html:not([data-theme="light"]) .text-amber-900 {
+    color: var(--muted) !important;
+  }
+
+  html:not([data-theme="light"]) .text-slate-700,
+  html:not([data-theme="light"]) .text-amber-950 {
+    color: var(--foreground) !important;
+  }
+}

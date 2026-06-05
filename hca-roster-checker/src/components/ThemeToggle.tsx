@@ -24,15 +24,11 @@ function applyTheme(theme: ThemeMode) {
 }
 
 export function ThemeToggle() {
-  const [theme, setTheme] = useState<ThemeMode>("dark");
-  const [ready, setReady] = useState(false);
+  const [theme, setTheme] = useState<ThemeMode>(() => getPreferredTheme());
 
   useEffect(() => {
-    const preferredTheme = getPreferredTheme();
-    setTheme(preferredTheme);
-    applyTheme(preferredTheme);
-    setReady(true);
-  }, []);
+    applyTheme(theme);
+  }, [theme]);
 
   function toggleTheme() {
     const nextTheme: ThemeMode = theme === "dark" ? "light" : "dark";
@@ -46,7 +42,6 @@ export function ThemeToggle() {
       type="button"
       onClick={toggleTheme}
       className="rounded-full border border-white/15 bg-white/8 px-3 py-1.5 text-xs font-medium text-[var(--muted)] backdrop-blur transition hover:border-white/25 hover:text-[var(--foreground)]"
-      disabled={!ready}
       title="Toggle theme"
     >
       {theme === "dark" ? "Light mode" : "Dark mode"}
