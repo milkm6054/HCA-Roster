@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { createAuditLog } from "@/lib/audit/auditLog";
 import { isOrga, requireApiSession } from "@/lib/auth/guards";
 import { getActor } from "@/lib/auth/getActor";
+import { isLikelyGamespassId } from "@/lib/steam/steamIds";
 
 export const dynamic = "force-dynamic";
 
@@ -18,22 +19,36 @@ export async function GET(request: Request) {
         },
     orderBy: { name: "asc" },
     include: {
-      _count: {
+      rosterEntries: {
         select: {
-          rosterEntries: true,
-          violations: {
-            where: {
-              NOT: {
-                type: "NEW_ACCOUNT",
-              },
-            },
+          id: true,
+        },
+      },
+      violations: {
+        where: {
+          NOT: {
+            type: "NEW_ACCOUNT",
           },
+        },
+        select: {
+          id: true,
+          rawSteamId: true,
         },
       },
     },
   });
 
-  return NextResponse.json({ teams });
+  return NextResponse.json({
+    teams: teams.map((team) => ({
+      id: team.id,
+      name: team.name,
+      tag: team.tag,
+      _count: {
+        rosterEntries: team.rosterEntries.length,
+        violations: team.violations.filter((violation) => !isLikelyGamespassId(violation.rawSteamId || "")).length,
+      },
+    })),
+  });
 }
 
 export async function POST(request: Request) {

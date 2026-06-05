@@ -91,10 +91,13 @@ export default function TeamsPage() {
 
   return (
     <section className="space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Teams</h1>
+      <div className="surface-card p-6">
+        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-500">Registry</p>
+        <h1 className="mt-3 text-3xl font-semibold tracking-tight">Teams</h1>
+      </div>
 
       {role === "HCA_ORGA" ? (
-        <form onSubmit={createTeam} className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 md:grid-cols-4">
+        <form onSubmit={createTeam} className="surface-card grid gap-3 p-4 md:grid-cols-4">
           <input
             placeholder="Team name"
             value={name}
@@ -107,7 +110,7 @@ export default function TeamsPage() {
             onChange={(e) => setTag(e.target.value)}
           />
           <div className="md:col-span-2">
-            <button className="bg-slate-900 px-4 py-2 text-white" disabled={loading}>
+            <button className="primary-button px-4 py-2" disabled={loading}>
               {loading ? "Creating..." : "Create team"}
             </button>
           </div>
@@ -116,9 +119,9 @@ export default function TeamsPage() {
 
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
-      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+      <div className="surface-table">
         <table className="w-full border-collapse text-left text-sm">
-          <thead className="bg-slate-50">
+          <thead>
             <tr>
               <th className="px-4 py-3">Name</th>
               <th className="px-4 py-3">Tag</th>
@@ -130,13 +133,13 @@ export default function TeamsPage() {
           </thead>
           <tbody>
             {teams.map((team) => (
-              <tr key={team.id} className="border-t border-slate-100">
+              <tr key={team.id}>
                 <td className="px-4 py-3 font-medium">{team.name}</td>
                 <td className="px-4 py-3">{team.tag || "-"}</td>
                 <td className="px-4 py-3">{team._count.rosterEntries}</td>
                 <td className="px-4 py-3">{team._count.violations}</td>
                 <td className="px-4 py-3">
-                  <Link href={`/teams/${team.id}`} className="text-slate-700 underline">
+                  <Link href={`/teams/${team.id}`} className="text-cyan-400 underline decoration-cyan-400/40 underline-offset-4">
                     Manage
                   </Link>
                 </td>
@@ -144,7 +147,7 @@ export default function TeamsPage() {
                   <td className="px-4 py-3">
                     <button
                       type="button"
-                      className="rounded bg-red-700 px-3 py-1 text-xs text-white disabled:opacity-60"
+                      className="danger-button px-3 py-1 text-xs disabled:opacity-60"
                       onClick={() => deleteTeam(team)}
                       disabled={busyTeamId === team.id}
                     >
@@ -156,7 +159,7 @@ export default function TeamsPage() {
             ))}
             {teams.length === 0 ? (
               <tr>
-                <td colSpan={role === "HCA_ORGA" ? 6 : 5} className="px-4 py-6 text-center text-slate-500">
+                <td colSpan={role === "HCA_ORGA" ? 6 : 5} className="px-4 py-6 text-center muted-copy">
                   No teams yet.
                 </td>
               </tr>
