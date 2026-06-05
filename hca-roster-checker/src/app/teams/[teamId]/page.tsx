@@ -53,8 +53,6 @@ type RosterSortDirection = "asc" | "desc";
 const SAMPLE_ROSTER_CSV = [
   "steam_id,display_name",
   "76561198000000001,SampleCaptain",
-  "[U:1:39734272],SampleSupport",
-  "STEAM_0:0:11101,SampleScout",
 ].join("\n");
 
 function getConflictingTeams(details: unknown): string[] {
