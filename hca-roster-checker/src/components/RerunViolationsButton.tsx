@@ -30,13 +30,13 @@ export function RerunViolationsButton() {
       <button
         type="button"
         onClick={rerunAllViolations}
-        className="rounded bg-slate-900 px-3 py-1.5 text-xs text-white hover:bg-slate-700 disabled:opacity-60"
+        className="rounded-full border border-cyan-400/20 bg-cyan-400/88 px-3 py-1.5 text-xs font-semibold text-slate-950 shadow-lg shadow-cyan-500/20 hover:bg-cyan-300 disabled:opacity-60"
         disabled={busy}
         title="Rerun duplicate-roster validation for all teams"
       >
         {busy ? "Rerunning..." : "Rerun Violations"}
       </button>
-      {resultText ? <span className="text-xs text-slate-500">{resultText}</span> : null}
+      {resultText ? <span className="text-xs text-[var(--muted)]">{resultText}</span> : null}
     </div>
   );
 }

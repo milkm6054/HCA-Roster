@@ -19,6 +19,8 @@ export default function MatchesPage() {
   const [week, setWeek] = useState(1);
   const [teamAId, setTeamAId] = useState("");
   const [teamBId, setTeamBId] = useState("");
+  const [busyMatchId, setBusyMatchId] = useState<string | null>(null);
+  const [error, setError] = useState("");
 
   async function refreshData() {
     const [teamsRes, matchesRes] = await Promise.all([
@@ -75,79 +77,171 @@ export default function MatchesPage() {
 
   async function createMatch(event: React.FormEvent) {
     event.preventDefault();
+    setError("");
 
-    await fetch("/api/matches", {
+    const res = await fetch("/api/matches", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ week, teamAId, teamBId }),
     });
 
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error || "Failed to create match.");
+      return;
+    }
+
     await refreshData();
+  }
+
+  async function deleteMatch(match: Match) {
+    const confirmed = window.confirm(`Delete Week ${match.week}: ${match.teamA.name} vs ${match.teamB.name}?`);
+    if (!confirmed) {
+      return;
+    }
+
+    setBusyMatchId(match.id);
+    setError("");
+
+    try {
+      const res = await fetch(`/api/matches/${match.id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Failed to delete match.");
+        return;
+      }
+
+      await refreshData();
+    } finally {
+      setBusyMatchId(null);
+    }
   }
 
   return (
     <section className="space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Matches</h1>
+      <div className="rounded-[28px] border border-white/10 bg-[var(--panel)]/85 p-6 shadow-[var(--shadow)] backdrop-blur-xl">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-500">Match control</p>
+            <h1 className="text-3xl font-semibold tracking-tight">Matches</h1>
+            <p className="max-w-2xl text-sm text-[var(--muted)]">
+              Create fixtures, review logged players, and remove stale or mistaken matches without leaving the schedule view.
+            </p>
+          </div>
 
-      <form onSubmit={createMatch} className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 md:grid-cols-5">
-        <input
-          type="number"
-          min={1}
-          value={week}
-          onChange={(e) => setWeek(Number(e.target.value))}
-          required
-        />
+          <div className="grid min-w-[240px] gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-[var(--muted)]">Total matches</p>
+              <p className="mt-2 text-3xl font-semibold">{matches.length}</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-[var(--muted)]">Teams ready</p>
+              <p className="mt-2 text-3xl font-semibold">{teams.length}</p>
+            </div>
+          </div>
+        </div>
+      </div>
 
-        <select value={teamAId} onChange={(e) => setTeamAId(e.target.value)} required>
-          <option value="">Select Team A</option>
-          {teams.map((team) => (
-            <option key={team.id} value={team.id}>
-              {team.name}
-            </option>
-          ))}
-        </select>
+      <form onSubmit={createMatch} className="grid gap-3 rounded-[24px] border border-white/10 bg-[var(--panel)]/85 p-5 shadow-[var(--shadow)] backdrop-blur-xl md:grid-cols-5">
+        <label className="space-y-2">
+          <span className="text-xs font-medium uppercase tracking-[0.16em] text-[var(--muted)]">Week</span>
+          <input
+            type="number"
+            min={1}
+            value={week}
+            onChange={(e) => setWeek(Number(e.target.value))}
+            required
+          />
+        </label>
 
-        <select value={teamBId} onChange={(e) => setTeamBId(e.target.value)} required>
-          <option value="">Select Team B</option>
-          {teams.map((team) => (
-            <option key={team.id} value={team.id}>
-              {team.name}
-            </option>
-          ))}
-        </select>
+        <label className="space-y-2">
+          <span className="text-xs font-medium uppercase tracking-[0.16em] text-[var(--muted)]">Team A</span>
+          <select value={teamAId} onChange={(e) => setTeamAId(e.target.value)} required>
+            <option value="">Select Team A</option>
+            {teams.map((team) => (
+              <option key={team.id} value={team.id}>
+                {team.name}
+              </option>
+            ))}
+          </select>
+        </label>
 
-        <div className="md:col-span-2">
-          <button className="bg-slate-900 px-4 py-2 text-white">Create match</button>
+        <label className="space-y-2">
+          <span className="text-xs font-medium uppercase tracking-[0.16em] text-[var(--muted)]">Team B</span>
+          <select value={teamBId} onChange={(e) => setTeamBId(e.target.value)} required>
+            <option value="">Select Team B</option>
+            {teams.map((team) => (
+              <option key={team.id} value={team.id}>
+                {team.name}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <div className="flex items-end md:col-span-2">
+          <button className="w-full border-cyan-400/30 bg-cyan-400/90 px-4 py-2.5 text-slate-950 shadow-lg shadow-cyan-500/20">
+            Create match
+          </button>
         </div>
       </form>
 
-      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+      {error ? (
+        <div className="rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+          {error}
+        </div>
+      ) : null}
+
+      <div className="overflow-hidden rounded-[24px] border border-white/10 bg-[var(--panel)]/85 shadow-[var(--shadow)] backdrop-blur-xl">
         <table className="w-full border-collapse text-left text-sm">
-          <thead className="bg-slate-50">
+          <thead className="bg-white/5 text-[var(--muted)]">
             <tr>
               <th className="px-4 py-3">Week</th>
               <th className="px-4 py-3">Teams</th>
               <th className="px-4 py-3">Players logged</th>
               <th className="px-4 py-3">Violations</th>
               <th className="px-4 py-3">Open</th>
+              <th className="px-4 py-3">Actions</th>
             </tr>
           </thead>
           <tbody>
             {matches.map((match) => (
-              <tr key={match.id} className="border-t border-slate-100">
-                <td className="px-4 py-3">{match.week}</td>
+              <tr key={match.id} className="border-t border-white/8">
+                <td className="px-4 py-3">
+                  <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-cyan-400">
+                    Week {match.week}
+                  </span>
+                </td>
                 <td className="px-4 py-3">
                   {match.teamA.name} vs {match.teamB.name}
                 </td>
                 <td className="px-4 py-3">{match._count.matchPlayers}</td>
                 <td className="px-4 py-3">{match._count.violations}</td>
                 <td className="px-4 py-3">
-                  <Link href={`/matches/${match.id}`} className="text-slate-700 underline">
+                  <Link href={`/matches/${match.id}`} className="text-cyan-400 underline decoration-cyan-400/50 underline-offset-4">
                     Manage
                   </Link>
                 </td>
+                <td className="px-4 py-3">
+                  <button
+                    type="button"
+                    className="border-red-400/20 bg-red-500/12 px-3 py-1.5 text-xs text-red-200"
+                    onClick={() => deleteMatch(match)}
+                    disabled={busyMatchId === match.id}
+                  >
+                    {busyMatchId === match.id ? "Deleting..." : "Delete"}
+                  </button>
+                </td>
               </tr>
             ))}
+            {matches.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-4 py-10 text-center text-[var(--muted)]">
+                  No matches created yet.
+                </td>
+              </tr>
+            ) : null}
           </tbody>
         </table>
       </div>

@@ -24,7 +24,7 @@ export function LogoutButton() {
   return (
     <button
       type="button"
-      className="border border-slate-300 bg-white px-3 py-1 text-xs"
+      className="rounded-full border border-white/15 bg-white/6 px-3 py-1.5 text-xs text-[var(--foreground)] backdrop-blur transition hover:border-white/25 hover:bg-white/10"
       onClick={logout}
       disabled={busy}
     >
