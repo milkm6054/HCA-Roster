@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { canAccessTeam, requireApiSession } from "@/lib/auth/guards";
 import { prisma } from "@/lib/prisma";
+import { isLikelyGamespassId } from "@/lib/steam/steamIds";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,7 @@ export async function GET(
   const { searchParams } = new URL(request.url);
   const season = searchParams.get("season") || "2026-S1";
 
-  const [roster, submittedEntriesCount, changeLogs, latestUploadLog] = await Promise.all([
+  const [roster, submittedEntriesCount, changeLogs, latestUploadLog, legacyGamespassViolations] = await Promise.all([
     prisma.rosterEntry.findMany({
       where: {
         teamId,
@@ -64,6 +65,17 @@ export async function GET(
         details: true,
       },
     }),
+    prisma.violation.findMany({
+      where: {
+        teamId,
+        type: "INVALID_STEAM_ID",
+      },
+      orderBy: [{ createdAt: "desc" }],
+      select: {
+        rawSteamId: true,
+        details: true,
+      },
+    }),
   ]);
 
   const changes = changeLogs
@@ -97,7 +109,7 @@ export async function GET(
       ? (latestUploadLog.details as Record<string, unknown>)
       : null;
   const uploadSeason = typeof uploadDetails?.season === "string" ? uploadDetails.season : null;
-  const gamespassMembers =
+  const uploadedGamespassMembers =
     uploadSeason === season && Array.isArray(uploadDetails?.gamespassMembers)
       ? uploadDetails.gamespassMembers
           .filter((item): item is { id: string; displayName?: string | null; rowNumber?: number | null } => {
@@ -111,6 +123,31 @@ export async function GET(
             rowNumber: item.rowNumber ?? null,
           }))
       : [];
+
+  const legacyGamespassMembers = legacyGamespassViolations
+    .filter((violation) => isLikelyGamespassId(violation.rawSteamId || ""))
+    .map((violation) => {
+      const details =
+        violation.details && typeof violation.details === "object" && !Array.isArray(violation.details)
+          ? (violation.details as Record<string, unknown>)
+          : null;
+      const issue =
+        details?.issue && typeof details.issue === "object" && !Array.isArray(details.issue)
+          ? (details.issue as Record<string, unknown>)
+          : null;
+      const rowNumbers = Array.isArray(issue?.rowNumbers) ? issue.rowNumbers : [];
+
+      return {
+        id: violation.rawSteamId || "",
+        displayName: null,
+        rowNumber: typeof rowNumbers[0] === "number" ? rowNumbers[0] : null,
+      };
+    })
+    .filter((member) => member.id);
+
+  const gamespassMembers = [...uploadedGamespassMembers, ...legacyGamespassMembers].filter(
+    (member, index, list) => list.findIndex((candidate) => candidate.id === member.id) === index,
+  );
 
   return NextResponse.json({
     season,

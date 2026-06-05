@@ -237,6 +237,46 @@ export default function TeamDetailPage() {
         </div>
       </div>
 
+      <section className="space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-amber-950">Active roster warnings</h2>
+            <p className="text-sm text-amber-900">
+              {violations.length > 0
+                ? `${violations.length} active violation${violations.length === 1 ? "" : "s"} need attention for this team.`
+                : "No active violations for this team."}
+            </p>
+          </div>
+        </div>
+
+        {violations.length > 0 ? (
+          <div className="overflow-hidden rounded-lg border border-amber-200 bg-white">
+            <table className="w-full border-collapse text-left text-sm">
+              <thead className="bg-amber-100/70">
+                <tr>
+                  <th className="px-4 py-3">Type</th>
+                  <th className="px-4 py-3">Severity</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Steam ID</th>
+                  <th className="px-4 py-3">Created</th>
+                </tr>
+              </thead>
+              <tbody>
+                {violations.map((issue) => (
+                  <tr key={issue.id} className="border-t border-amber-100">
+                    <td className="px-4 py-3 font-medium text-amber-950">{issue.type}</td>
+                    <td className="px-4 py-3">{issue.severity}</td>
+                    <td className="px-4 py-3">{issue.status}</td>
+                    <td className="px-4 py-3 font-mono text-xs">{issue.rawSteamId || "-"}</td>
+                    <td className="px-4 py-3">{new Date(issue.createdAt).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+      </section>
+
       {canSubmitInitialRoster ? (
         <form onSubmit={uploadRoster} className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
           <h2 className="text-lg font-semibold">Initial roster submission</h2>
@@ -372,31 +412,6 @@ export default function TeamDetailPage() {
           </table>
         </div>
       </section>
-
-      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-        <table className="w-full border-collapse text-left text-sm">
-          <thead className="bg-slate-50">
-            <tr>
-              <th className="px-4 py-3">Type</th>
-              <th className="px-4 py-3">Severity</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Steam ID</th>
-              <th className="px-4 py-3">Created</th>
-            </tr>
-          </thead>
-          <tbody>
-            {violations.map((issue) => (
-              <tr key={issue.id} className="border-t border-slate-100">
-                <td className="px-4 py-3">{issue.type}</td>
-                <td className="px-4 py-3">{issue.severity}</td>
-                <td className="px-4 py-3">{issue.status}</td>
-                <td className="px-4 py-3 font-mono text-xs">{issue.rawSteamId || "-"}</td>
-                <td className="px-4 py-3">{new Date(issue.createdAt).toLocaleString()}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
 
       <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
         <h2 className="text-lg font-semibold">Gamespass members</h2>

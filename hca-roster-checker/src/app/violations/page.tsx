@@ -70,6 +70,17 @@ export default function ViolationsPage() {
     await refreshViolations();
   }
 
+  const groupedViolations = violations.reduce<Record<string, Violation[]>>((groups, violation) => {
+    const teamName = violation.team?.name || "Unassigned";
+    if (!groups[teamName]) {
+      groups[teamName] = [];
+    }
+    groups[teamName].push(violation);
+    return groups;
+  }, {});
+
+  const groupedEntries = Object.entries(groupedViolations).sort(([left], [right]) => left.localeCompare(right));
+
   return (
     <section className="space-y-6">
       <h1 className="text-2xl font-semibold tracking-tight">Violations</h1>
@@ -97,56 +108,70 @@ export default function ViolationsPage() {
         </select>
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-        <table className="w-full border-collapse text-left text-sm">
-          <thead className="bg-slate-50">
-            <tr>
-              <th className="px-4 py-3">Type</th>
-              <th className="px-4 py-3">Severity</th>
-              <th className="px-4 py-3">Team</th>
-              <th className="px-4 py-3">Steam ID</th>
-              <th className="px-4 py-3">Details</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {violations.map((violation) => (
-              <tr key={violation.id} className="border-t border-slate-100 align-top">
-                <td className="px-4 py-3">{violation.type}</td>
-                <td className="px-4 py-3">{violation.severity}</td>
-                <td className="px-4 py-3">{violation.team?.name || "-"}</td>
-                <td className="px-4 py-3 font-mono text-xs">{violation.rawSteamId || "-"}</td>
-                <td className="max-w-xs px-4 py-3 text-xs">
-                  <pre className="overflow-auto whitespace-pre-wrap">{JSON.stringify(violation.details, null, 2)}</pre>
-                </td>
-                <td className="px-4 py-3">{violation.status}</td>
-                <td className="space-x-2 px-4 py-3">
-                  {role === "HCA_ORGA" ? (
-                    <>
-                      <button
-                        className="bg-slate-700 px-2 py-1 text-xs text-white"
-                        onClick={() => setViolationStatus(violation.id, "DISMISSED")}
-                        disabled={violation.status === "DISMISSED"}
-                      >
-                        Dismiss
-                      </button>
-                      <button
-                        className="bg-slate-900 px-2 py-1 text-xs text-white"
-                        onClick={() => setViolationStatus(violation.id, "CONFIRMED")}
-                        disabled={violation.status === "CONFIRMED"}
-                      >
-                        Confirm
-                      </button>
-                    </>
-                  ) : (
-                    <span className="text-xs text-slate-500">Read only</span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="space-y-4">
+        {groupedEntries.map(([teamName, teamViolations]) => (
+          <section key={teamName} className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+            <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+              <h2 className="text-lg font-semibold tracking-tight">{teamName}</h2>
+              <p className="text-sm text-slate-500">
+                {teamViolations.length} violation{teamViolations.length === 1 ? "" : "s"}
+              </p>
+            </div>
+            <table className="w-full border-collapse text-left text-sm">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="px-4 py-3">Type</th>
+                  <th className="px-4 py-3">Severity</th>
+                  <th className="px-4 py-3">Steam ID</th>
+                  <th className="px-4 py-3">Details</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {teamViolations.map((violation) => (
+                  <tr key={violation.id} className="border-t border-slate-100 align-top">
+                    <td className="px-4 py-3">{violation.type}</td>
+                    <td className="px-4 py-3">{violation.severity}</td>
+                    <td className="px-4 py-3 font-mono text-xs">{violation.rawSteamId || "-"}</td>
+                    <td className="max-w-xs px-4 py-3 text-xs">
+                      <pre className="overflow-auto whitespace-pre-wrap">{JSON.stringify(violation.details, null, 2)}</pre>
+                    </td>
+                    <td className="px-4 py-3">{violation.status}</td>
+                    <td className="space-x-2 px-4 py-3">
+                      {role === "HCA_ORGA" ? (
+                        <>
+                          <button
+                            className="bg-slate-700 px-2 py-1 text-xs text-white"
+                            onClick={() => setViolationStatus(violation.id, "DISMISSED")}
+                            disabled={violation.status === "DISMISSED"}
+                          >
+                            Dismiss
+                          </button>
+                          <button
+                            className="bg-slate-900 px-2 py-1 text-xs text-white"
+                            onClick={() => setViolationStatus(violation.id, "CONFIRMED")}
+                            disabled={violation.status === "CONFIRMED"}
+                          >
+                            Confirm
+                          </button>
+                        </>
+                      ) : (
+                        <span className="text-xs text-slate-500">Read only</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        ))}
+
+        {groupedEntries.length === 0 ? (
+          <div className="rounded-lg border border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-500">
+            No violations match the current filters.
+          </div>
+        ) : null}
       </div>
     </section>
   );

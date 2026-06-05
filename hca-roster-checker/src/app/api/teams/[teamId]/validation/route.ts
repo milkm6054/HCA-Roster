@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { canAccessTeam, requireApiSession } from "@/lib/auth/guards";
 import { prisma } from "@/lib/prisma";
+import { isLikelyGamespassId } from "@/lib/steam/steamIds";
 
 export const dynamic = "force-dynamic";
 
@@ -27,5 +28,7 @@ export async function GET(
     orderBy: { createdAt: "desc" },
   });
 
-  return NextResponse.json({ violations });
+  return NextResponse.json({
+    violations: violations.filter((violation) => !isLikelyGamespassId(violation.rawSteamId || "")),
+  });
 }
