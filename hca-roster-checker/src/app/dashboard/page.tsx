@@ -141,6 +141,14 @@ export default async function DashboardPage() {
           </ul>
         </section>
       ) : null}
+
+      <section className="surface-card p-6">
+        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-500">Quote Board</p>
+        <blockquote className="mt-3 text-lg font-medium leading-relaxed">
+          &ldquo;Do not fall into the well of egoism and conceit when you taste some victory water.&rdquo;
+        </blockquote>
+        <p className="mt-3 text-sm muted-copy">- The Lion</p>
+      </section>
     </section>
   );
 }
