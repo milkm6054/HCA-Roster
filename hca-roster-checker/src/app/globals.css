@@ -203,6 +203,33 @@ button:disabled {
   border-radius: 1.25rem;
 }
 
+.gallery-quote {
+  margin: 1rem auto 0;
+  max-width: 44rem;
+  padding: 1.5rem 0 0.5rem;
+  text-align: center;
+}
+
+.gallery-quote blockquote {
+  margin: 0;
+  color: color-mix(in srgb, var(--foreground) 74%, transparent);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(1.4rem, 2.6vw, 2.1rem);
+  font-style: italic;
+  font-weight: 500;
+  line-height: 1.7;
+}
+
+.gallery-quote cite {
+  display: block;
+  margin-top: 0.9rem;
+  color: color-mix(in srgb, var(--muted) 88%, transparent);
+  font-size: 0.78rem;
+  font-style: normal;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+}
+
 html[data-theme="dark"] .bg-white,
 html[data-theme="dark"] .bg-slate-50,
 html[data-theme="dark"] .bg-amber-50 {
