@@ -36,6 +36,9 @@ type Violation = {
   rawSteamId?: string | null;
   details: unknown;
   createdAt: string;
+  player?: {
+    displayName?: string | null;
+  } | null;
 };
 
 type GamespassMember = {
@@ -255,6 +258,7 @@ export default function TeamDetailPage() {
               <thead className="bg-amber-100/70">
                 <tr>
                   <th className="px-4 py-3">Type</th>
+                  <th className="px-4 py-3">Player</th>
                   <th className="px-4 py-3">Severity</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">Steam ID</th>
@@ -265,6 +269,7 @@ export default function TeamDetailPage() {
                 {violations.map((issue) => (
                   <tr key={issue.id} className="border-t border-amber-100">
                     <td className="px-4 py-3 font-medium text-amber-950">{issue.type}</td>
+                    <td className="px-4 py-3">{issue.player?.displayName || "-"}</td>
                     <td className="px-4 py-3">{issue.severity}</td>
                     <td className="px-4 py-3">{issue.status}</td>
                     <td className="px-4 py-3 font-mono text-xs">{issue.rawSteamId || "-"}</td>

@@ -56,6 +56,11 @@ export async function POST(request: Request) {
             rawSteamId: steamId64,
             details: {
               season,
+              displayName: entry.player.displayName,
+              teamName: entry.team.name,
+              conflictingTeamNames: relatedEntries
+                .filter((relatedEntry) => relatedEntry.teamId !== entry.teamId)
+                .map((relatedEntry) => relatedEntry.team.name),
               conflictingTeamIds: teamIds.filter((id) => id !== entry.teamId),
             } as Prisma.JsonObject,
           },

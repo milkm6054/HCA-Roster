@@ -25,6 +25,9 @@ export async function GET(
         in: ["DUPLICATE_ROSTER", "INVALID_STEAM_ID"],
       },
     },
+    include: {
+      player: true,
+    },
     orderBy: { createdAt: "desc" },
   });
 

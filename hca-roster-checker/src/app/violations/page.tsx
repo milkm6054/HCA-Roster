@@ -10,6 +10,7 @@ type Violation = {
   rawSteamId?: string | null;
   details: unknown;
   team?: { name: string } | null;
+  player?: { displayName?: string | null } | null;
 };
 
 const statusOptions = ["", "OPEN", "DISMISSED", "CONFIRMED"] as const;
@@ -121,6 +122,7 @@ export default function ViolationsPage() {
               <thead className="bg-slate-50">
                 <tr>
                   <th className="px-4 py-3">Type</th>
+                  <th className="px-4 py-3">Player</th>
                   <th className="px-4 py-3">Severity</th>
                   <th className="px-4 py-3">Steam ID</th>
                   <th className="px-4 py-3">Details</th>
@@ -132,6 +134,7 @@ export default function ViolationsPage() {
                 {teamViolations.map((violation) => (
                   <tr key={violation.id} className="border-t border-slate-100 align-top">
                     <td className="px-4 py-3">{violation.type}</td>
+                    <td className="px-4 py-3">{violation.player?.displayName || "-"}</td>
                     <td className="px-4 py-3">{violation.severity}</td>
                     <td className="px-4 py-3 font-mono text-xs">{violation.rawSteamId || "-"}</td>
                     <td className="max-w-xs px-4 py-3 text-xs">

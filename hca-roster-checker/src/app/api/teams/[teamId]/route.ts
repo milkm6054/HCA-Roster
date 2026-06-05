@@ -75,3 +75,58 @@ export async function PATCH(
 
   return NextResponse.json({ team });
 }
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ teamId: string }> },
+) {
+  const auth = await requireApiSession(request);
+  if (!auth.ok) return auth.response;
+  if (!isOrga(auth.session)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const { teamId } = await params;
+
+  const team = await prisma.team.findUnique({
+    where: { id: teamId },
+    select: {
+      id: true,
+      name: true,
+      _count: {
+        select: {
+          matchesAsTeamA: true,
+          matchesAsTeamB: true,
+        },
+      },
+    },
+  });
+
+  if (!team) {
+    return NextResponse.json({ error: "Team not found." }, { status: 404 });
+  }
+
+  const scheduledMatches = team._count.matchesAsTeamA + team._count.matchesAsTeamB;
+  if (scheduledMatches > 0) {
+    return NextResponse.json(
+      { error: "Cannot delete a team that is linked to existing matches." },
+      { status: 409 },
+    );
+  }
+
+  await prisma.team.delete({
+    where: { id: teamId },
+  });
+
+  await createAuditLog({
+    action: "TEAM_DELETED",
+    actor: await getActor(request),
+    entityType: "Team",
+    entityId: team.id,
+    details: {
+      name: team.name,
+    },
+  });
+
+  return NextResponse.json({ ok: true, deletedTeamId: team.id });
+}

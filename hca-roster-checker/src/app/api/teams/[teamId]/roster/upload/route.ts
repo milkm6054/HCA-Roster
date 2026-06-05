@@ -69,6 +69,8 @@ export async function POST(
     }
   }
 
+  const playerSnapshotBySteamId = new Map<string, { playerId: string; displayName: string | null }>();
+
   const actor = await getActor(request);
   let acceptedPlayers = 0;
 
@@ -127,6 +129,11 @@ export async function POST(
         },
       });
 
+      playerSnapshotBySteamId.set(normalized.steamId64, {
+        playerId: player.id,
+        displayName: player.displayName || normalized.row.displayName || null,
+      });
+
       acceptedPlayers += 1;
     }
 
@@ -142,6 +149,7 @@ export async function POST(
 
       await tx.violation.create({
         data: {
+          playerId: issue.steamId64 ? playerSnapshotBySteamId.get(issue.steamId64)?.playerId : undefined,
           type:
             issue.type === "INVALID_STEAM_ID"
               ? ViolationType.INVALID_STEAM_ID
@@ -152,6 +160,9 @@ export async function POST(
           rawSteamId: issue.steamIdInput,
           details: {
             issue,
+            displayName: issue.steamId64
+              ? playerSnapshotBySteamId.get(issue.steamId64)?.displayName || null
+              : null,
             season,
             sourceFileName,
           } as Prisma.JsonObject,

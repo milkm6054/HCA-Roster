@@ -19,6 +19,8 @@ export default function TeamsPage() {
   const [name, setName] = useState("");
   const [tag, setTag] = useState("");
   const [loading, setLoading] = useState(false);
+  const [busyTeamId, setBusyTeamId] = useState<string | null>(null);
+  const [error, setError] = useState("");
 
   async function refreshTeams() {
     const res = await fetch("/api/teams");
@@ -47,6 +49,7 @@ export default function TeamsPage() {
   async function createTeam(event: React.FormEvent) {
     event.preventDefault();
     setLoading(true);
+    setError("");
     try {
       await fetch("/api/teams", {
         method: "POST",
@@ -59,6 +62,30 @@ export default function TeamsPage() {
       await refreshTeams();
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function deleteTeam(team: Team) {
+    const confirmed = window.confirm(`Delete team \"${team.name}\"? This cannot be undone.`);
+    if (!confirmed) {
+      return;
+    }
+
+    setBusyTeamId(team.id);
+    setError("");
+    try {
+      const res = await fetch(`/api/teams/${team.id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Failed to delete team.");
+        return;
+      }
+
+      await refreshTeams();
+    } finally {
+      setBusyTeamId(null);
     }
   }
 
@@ -87,6 +114,8 @@ export default function TeamsPage() {
         </form>
       ) : null}
 
+      {error ? <p className="text-sm text-red-600">{error}</p> : null}
+
       <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
         <table className="w-full border-collapse text-left text-sm">
           <thead className="bg-slate-50">
@@ -96,6 +125,7 @@ export default function TeamsPage() {
               <th className="px-4 py-3">Roster entries</th>
               <th className="px-4 py-3">Violations</th>
               <th className="px-4 py-3">Open</th>
+              {role === "HCA_ORGA" ? <th className="px-4 py-3">Actions</th> : null}
             </tr>
           </thead>
           <tbody>
@@ -110,11 +140,23 @@ export default function TeamsPage() {
                     Manage
                   </Link>
                 </td>
+                {role === "HCA_ORGA" ? (
+                  <td className="px-4 py-3">
+                    <button
+                      type="button"
+                      className="rounded bg-red-700 px-3 py-1 text-xs text-white disabled:opacity-60"
+                      onClick={() => deleteTeam(team)}
+                      disabled={busyTeamId === team.id}
+                    >
+                      {busyTeamId === team.id ? "Deleting..." : "Delete"}
+                    </button>
+                  </td>
+                ) : null}
               </tr>
             ))}
             {teams.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-slate-500">
+                <td colSpan={role === "HCA_ORGA" ? 6 : 5} className="px-4 py-6 text-center text-slate-500">
                   No teams yet.
                 </td>
               </tr>
