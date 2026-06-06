@@ -52,8 +52,8 @@ type RosterSortKey = "steamId64" | "displayName" | "submittedAt";
 type RosterSortDirection = "asc" | "desc";
 
 const SAMPLE_ROSTER_CSV = [
-  "steam_id,display_name",
-  "76561198000000001,SampleCaptain",
+  "name,steam_id",
+  "SampleCaptain,76561198000000001",
 ].join("\n");
 
 function getInitials(label: string): string {
@@ -100,7 +100,7 @@ export default function TeamDetailPage() {
   const [violations, setViolations] = useState<Violation[]>([]);
   const [gamespassMembers, setGamespassMembers] = useState<GamespassMember[]>([]);
 
-  const [csvText, setCsvText] = useState("steam_id,display_name\n");
+  const [csvText, setCsvText] = useState("name,steam_id\n");
   const [file, setFile] = useState<File | null>(null);
   const [uploadResult, setUploadResult] = useState<Record<string, unknown> | null>(null);
   const [addSteamId, setAddSteamId] = useState("");
@@ -462,7 +462,7 @@ export default function TeamDetailPage() {
         <form onSubmit={uploadRoster} className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
           <h2 className="text-lg font-semibold">Initial roster submission</h2>
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-xs text-slate-500">Expected headers: steam_id, display_name (optional)</p>
+            <p className="text-xs text-slate-500">Accepted headers: steam_id, display_name or name, steam_id</p>
             <a
               href={sampleRosterCsvHref}
               download="roster-template-example.csv"

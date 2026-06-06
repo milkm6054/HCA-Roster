@@ -82,7 +82,7 @@ async function main() {
     ],
   });
 
-  const match = await prisma.match.create({
+  await prisma.match.create({
     data: {
       week: 1,
       teamAId: teamA.id,
@@ -101,15 +101,6 @@ async function main() {
         playerId: players[0].id,
         rawSteamId: players[0].steamId64,
         details: { reason: "Sample duplicate roster issue" },
-      },
-      {
-        type: ViolationType.UNREGISTERED_PLAYER,
-        severity: ViolationSeverity.HIGH,
-        status: ViolationStatus.OPEN,
-        teamId: teamA.id,
-        matchId: match.id,
-        rawSteamId: "76561198009999999",
-        details: { reason: "Sample unregistered match player" },
       },
     ],
   });

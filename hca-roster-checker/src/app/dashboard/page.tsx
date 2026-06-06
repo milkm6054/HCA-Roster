@@ -170,7 +170,6 @@ export default async function DashboardPage() {
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-500">Teams</p>
-            <h2 className="mt-2 text-xl font-semibold tracking-tight">League graphic wall</h2>
           </div>
           <p className="text-sm muted-copy">Every registered team appears here. Logos update as teams upload them.</p>
         </div>

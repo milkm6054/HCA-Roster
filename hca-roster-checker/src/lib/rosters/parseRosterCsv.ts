@@ -20,6 +20,7 @@ export type ParsedRosterCsv = {
 type RawRosterCsvRow = {
   steam_id?: string;
   display_name?: string;
+  name?: string;
   [key: string]: string | undefined;
 };
 
@@ -35,7 +36,7 @@ export function parseRosterCsv(csvText: string): ParsedRosterCsv {
 
   parsed.data.forEach((row, index) => {
     const steamId = row.steam_id?.trim();
-    const displayName = row.display_name?.trim();
+    const displayName = row.display_name?.trim() || row.name?.trim();
     const rowNumber = index + 2;
 
     if (!steamId) {
