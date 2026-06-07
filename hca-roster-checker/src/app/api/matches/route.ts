@@ -10,11 +10,13 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   const auth = await requireApiSession(request);
   if (!auth.ok) return auth.response;
-  if (!isOrga(auth.session)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
 
   const matches = await prisma.match.findMany({
+    where: isOrga(auth.session)
+      ? undefined
+      : {
+          OR: [{ teamAId: auth.session.teamId }, { teamBId: auth.session.teamId }],
+        },
     orderBy: [{ week: "asc" }, { createdAt: "desc" }],
     include: {
       teamA: true,

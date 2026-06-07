@@ -3,8 +3,13 @@ import Papa from "papaparse";
 export type ParsedMatchStatsRow = {
   team: string;
   steamId: string;
+  displayName?: string;
   kills?: number;
   deaths?: number;
+  kpd?: number;
+  kpm?: number;
+  dpm?: number;
+  timeSeconds?: number;
   role?: string;
   rowNumber: number;
 };
@@ -21,8 +26,14 @@ export type ParsedMatchStatsCsv = {
 type RawMatchStatsRow = {
   team?: string;
   steam_id?: string;
+  steam_name?: string;
+  display_name?: string;
   kills?: string;
   deaths?: string;
+  kpd?: string;
+  kpm?: string;
+  dpm?: string;
+  time_seconds?: string;
   role?: string;
   [key: string]: string | undefined;
 };
@@ -54,8 +65,13 @@ export function parseMatchStatsCsv(csvText: string): ParsedMatchStatsCsv {
     rows.push({
       team,
       steamId,
+      displayName: row.steam_name?.trim() || row.display_name?.trim() || undefined,
       kills: row.kills ? Number(row.kills) : undefined,
       deaths: row.deaths ? Number(row.deaths) : undefined,
+      kpd: row.kpd ? Number(row.kpd) : undefined,
+      kpm: row.kpm ? Number(row.kpm) : undefined,
+      dpm: row.dpm ? Number(row.dpm) : undefined,
+      timeSeconds: row.time_seconds ? Number(row.time_seconds) : undefined,
       role: row.role?.trim() || undefined,
       rowNumber,
     });

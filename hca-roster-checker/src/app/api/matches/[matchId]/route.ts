@@ -10,9 +10,6 @@ export async function GET(
 ) {
   const auth = await requireApiSession(_request);
   if (!auth.ok) return auth.response;
-  if (!isOrga(auth.session)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
 
   const { matchId } = await params;
 
@@ -36,6 +33,14 @@ export async function GET(
 
   if (!match) {
     return NextResponse.json({ error: "Match not found." }, { status: 404 });
+  }
+
+  if (
+    !isOrga(auth.session) &&
+    auth.session.teamId !== match.teamAId &&
+    auth.session.teamId !== match.teamBId
+  ) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   return NextResponse.json({ match });

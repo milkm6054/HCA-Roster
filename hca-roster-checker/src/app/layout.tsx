@@ -68,6 +68,9 @@ export default async function RootLayout({
                       <Link href="/matches" prefetch={false} className="nav-link">
                         Matches
                       </Link>
+                      <Link href="/players" prefetch={false} className="nav-link">
+                        Player Lookup
+                      </Link>
                       <Link href="/admin/team-reps" prefetch={false} className="nav-link">
                         Team Reps
                       </Link>
@@ -77,7 +80,11 @@ export default async function RootLayout({
                         </Link>
                       ) : null}
                     </>
-                  ) : null}
+                  ) : (
+                    <Link href="/matches" prefetch={false} className="nav-link">
+                      Matches
+                    </Link>
+                  )}
                   <Link href="/violations" prefetch={false} className="nav-link">
                     Violations
                   </Link>

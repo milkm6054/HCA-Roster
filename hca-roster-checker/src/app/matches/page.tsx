@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { HLL_MAPS } from "@/lib/matches/hllMaps";
 
 type Team = { id: string; name: string; tag?: string | null };
+type SessionRole = "HCA_ORGA" | "TEAM_REP" | null;
 type Match = {
   id: string;
   week: number;
@@ -20,6 +21,7 @@ type Match = {
 export default function MatchesPage() {
   const [teams, setTeams] = useState<Team[]>([]);
   const [matches, setMatches] = useState<Match[]>([]);
+  const [role, setRole] = useState<SessionRole>(null);
   const [week, setWeek] = useState(1);
   const [teamAId, setTeamAId] = useState("");
   const [teamBId, setTeamBId] = useState("");
@@ -30,13 +32,16 @@ export default function MatchesPage() {
   const [error, setError] = useState("");
 
   async function refreshData() {
-    const [teamsRes, matchesRes] = await Promise.all([
+    const [meRes, teamsRes, matchesRes] = await Promise.all([
+      fetch("/api/auth/me"),
       fetch("/api/teams"),
       fetch("/api/matches"),
     ]);
 
+    const meData = await meRes.json();
     const teamsData = await teamsRes.json();
     const matchesData = await matchesRes.json();
+    setRole(meData.session?.role || null);
     setTeams(teamsData.teams || []);
     setMatches(matchesData.matches || []);
 
@@ -53,11 +58,13 @@ export default function MatchesPage() {
     let active = true;
 
     void (async () => {
-      const [teamsRes, matchesRes] = await Promise.all([
+      const [meRes, teamsRes, matchesRes] = await Promise.all([
+        fetch("/api/auth/me"),
         fetch("/api/teams"),
         fetch("/api/matches"),
       ]);
 
+      const meData = await meRes.json();
       const teamsData = await teamsRes.json();
       const matchesData = await matchesRes.json();
 
@@ -65,6 +72,7 @@ export default function MatchesPage() {
         return;
       }
 
+      setRole(meData.session?.role || null);
       setTeams(teamsData.teams || []);
       setMatches(matchesData.matches || []);
 
@@ -153,7 +161,8 @@ export default function MatchesPage() {
         </div>
       </div>
 
-      <form onSubmit={createMatch} className="grid gap-3 rounded-[24px] border border-white/10 bg-[var(--panel)]/85 p-5 shadow-[var(--shadow)] backdrop-blur-xl md:grid-cols-6">
+      {role === "HCA_ORGA" ? (
+        <form onSubmit={createMatch} className="grid gap-3 rounded-[24px] border border-white/10 bg-[var(--panel)]/85 p-5 shadow-[var(--shadow)] backdrop-blur-xl md:grid-cols-6">
         <label className="space-y-2">
           <span className="text-xs font-medium uppercase tracking-[0.16em] text-[var(--muted)]">Week</span>
           <input
@@ -225,7 +234,8 @@ export default function MatchesPage() {
             Create match
           </button>
         </div>
-      </form>
+        </form>
+      ) : null}
 
       {error ? (
         <div className="rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
@@ -245,7 +255,7 @@ export default function MatchesPage() {
               <th className="px-4 py-3">Violations</th>
               <th className="px-4 py-3">Link</th>
               <th className="px-4 py-3">Open</th>
-              <th className="px-4 py-3">Actions</th>
+              {role === "HCA_ORGA" ? <th className="px-4 py-3">Actions</th> : null}
             </tr>
           </thead>
           <tbody>
@@ -279,21 +289,23 @@ export default function MatchesPage() {
                     Manage
                   </Link>
                 </td>
-                <td className="px-4 py-3">
-                  <button
-                    type="button"
-                    className="border-red-400/20 bg-red-500/12 px-3 py-1.5 text-xs text-red-200"
-                    onClick={() => deleteMatch(match)}
-                    disabled={busyMatchId === match.id}
-                  >
-                    {busyMatchId === match.id ? "Deleting..." : "Delete"}
-                  </button>
-                </td>
+                {role === "HCA_ORGA" ? (
+                  <td className="px-4 py-3">
+                    <button
+                      type="button"
+                      className="border-red-400/20 bg-red-500/12 px-3 py-1.5 text-xs text-red-200"
+                      onClick={() => deleteMatch(match)}
+                      disabled={busyMatchId === match.id}
+                    >
+                      {busyMatchId === match.id ? "Deleting..." : "Delete"}
+                    </button>
+                  </td>
+                ) : null}
               </tr>
             ))}
             {matches.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-4 py-10 text-center text-[var(--muted)]">
+                <td colSpan={role === "HCA_ORGA" ? 9 : 8} className="px-4 py-10 text-center text-[var(--muted)]">
                   No matches created yet.
                 </td>
               </tr>

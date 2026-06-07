@@ -15,9 +15,13 @@ type MatchData = {
     id: string;
     rawSteamId: string;
     steamId64?: string | null;
+    displayName?: string | null;
     role?: string | null;
     kills?: number | null;
     deaths?: number | null;
+    killDeathRatio?: number | null;
+    killsPerMinute?: number | null;
+    deathsPerMinute?: number | null;
     team: { name: string };
   }>;
 };
@@ -27,13 +31,18 @@ export default function MatchDetailPage() {
   const matchId = params.matchId;
 
   const [match, setMatch] = useState<MatchData | null>(null);
+  const [role, setRole] = useState<"HCA_ORGA" | "TEAM_REP" | null>(null);
   const [csvText, setCsvText] = useState("team,steam_id,kills,deaths,role\n");
   const [file, setFile] = useState<File | null>(null);
   const [uploadSummary, setUploadSummary] = useState<Record<string, unknown> | null>(null);
+  const [error, setError] = useState("");
+  const [busyImport, setBusyImport] = useState(false);
 
   async function refreshMatch() {
-    const res = await fetch(`/api/matches/${matchId}`);
+    const [meRes, res] = await Promise.all([fetch("/api/auth/me"), fetch(`/api/matches/${matchId}`)]);
+    const meData = await meRes.json();
     const data = await res.json();
+    setRole(meData.session?.role || null);
     setMatch(data.match || null);
   }
 
@@ -42,9 +51,11 @@ export default function MatchDetailPage() {
     if (!matchId) return;
 
     void (async () => {
-      const res = await fetch(`/api/matches/${matchId}`);
+      const [meRes, res] = await Promise.all([fetch("/api/auth/me"), fetch(`/api/matches/${matchId}`)]);
+      const meData = await meRes.json();
       const data = await res.json();
       if (active) {
+        setRole(meData.session?.role || null);
         setMatch(data.match || null);
       }
     })();
@@ -56,6 +67,7 @@ export default function MatchDetailPage() {
 
   async function uploadStats(event: React.FormEvent) {
     event.preventDefault();
+    setError("");
     const formData = new FormData();
     if (file) {
       formData.append("file", file);
@@ -69,8 +81,33 @@ export default function MatchDetailPage() {
     });
 
     const data = await res.json();
+    if (!res.ok) {
+      setError(data.error || "Failed to upload stats.");
+      return;
+    }
     setUploadSummary(data);
     await refreshMatch();
+  }
+
+  async function importStatsFromLink() {
+    setBusyImport(true);
+    setError("");
+
+    try {
+      const res = await fetch(`/api/matches/${matchId}/stats/import-link`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Failed to import stats from the game link.");
+        return;
+      }
+
+      setUploadSummary(data);
+      await refreshMatch();
+    } finally {
+      setBusyImport(false);
+    }
   }
 
   return (
@@ -98,26 +135,37 @@ export default function MatchDetailPage() {
         </div>
         {match?.gameUrl ? (
           <div className="md:col-span-4">
-            <a
-              href={match.gameUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="text-sm text-slate-700 underline underline-offset-4"
-            >
-              Open linked game record
-            </a>
+            <div className="flex flex-wrap items-center gap-3">
+              <a
+                href={match.gameUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-sm text-slate-700 underline underline-offset-4"
+              >
+                Open linked game record
+              </a>
+              {role === "HCA_ORGA" ? (
+                <button type="button" className="bg-slate-900 px-4 py-2 text-white" onClick={importStatsFromLink} disabled={busyImport}>
+                  {busyImport ? "Importing..." : "Import stats from link"}
+                </button>
+              ) : null}
+            </div>
           </div>
         ) : null}
       </div>
 
-      <form onSubmit={uploadStats} className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
-        <h2 className="text-lg font-semibold">Upload match stats CSV</h2>
-        <p className="text-xs text-slate-500">Expected headers: team, steam_id, kills, deaths, role</p>
+      {role === "HCA_ORGA" ? (
+        <form onSubmit={uploadStats} className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
+          <h2 className="text-lg font-semibold">Upload match stats CSV</h2>
+          <p className="text-xs text-slate-500">Expected headers: team, steam_id, steam_name, kills, deaths, kpd, kpm, dpm, role</p>
 
-        <textarea className="h-40 w-full" value={csvText} onChange={(e) => setCsvText(e.target.value)} />
-        <input type="file" accept=".csv,text/csv" onChange={(e) => setFile(e.target.files?.[0] || null)} />
-        <button className="bg-slate-900 px-4 py-2 text-white">Upload stats</button>
-      </form>
+          <textarea className="h-40 w-full" value={csvText} onChange={(e) => setCsvText(e.target.value)} />
+          <input type="file" accept=".csv,text/csv" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+          <button className="bg-slate-900 px-4 py-2 text-white">Upload stats</button>
+        </form>
+      ) : null}
+
+      {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
       {uploadSummary ? (
         <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm">
@@ -132,9 +180,13 @@ export default function MatchDetailPage() {
             <tr>
               <th className="px-4 py-3">Team</th>
               <th className="px-4 py-3">Steam ID input</th>
+              <th className="px-4 py-3">Steam name</th>
               <th className="px-4 py-3">SteamID64</th>
               <th className="px-4 py-3">K</th>
               <th className="px-4 py-3">D</th>
+              <th className="px-4 py-3">KPD</th>
+              <th className="px-4 py-3">KPM</th>
+              <th className="px-4 py-3">DPM</th>
               <th className="px-4 py-3">Role</th>
             </tr>
           </thead>
@@ -143,9 +195,13 @@ export default function MatchDetailPage() {
               <tr key={player.id} className="border-t border-slate-100">
                 <td className="px-4 py-3">{player.team.name}</td>
                 <td className="px-4 py-3 font-mono text-xs">{player.rawSteamId}</td>
+                <td className="px-4 py-3">{player.displayName || "-"}</td>
                 <td className="px-4 py-3 font-mono text-xs">{player.steamId64 || "-"}</td>
                 <td className="px-4 py-3">{player.kills ?? "-"}</td>
                 <td className="px-4 py-3">{player.deaths ?? "-"}</td>
+                <td className="px-4 py-3">{player.killDeathRatio?.toFixed(2) ?? "-"}</td>
+                <td className="px-4 py-3">{player.killsPerMinute?.toFixed(2) ?? "-"}</td>
+                <td className="px-4 py-3">{player.deathsPerMinute?.toFixed(2) ?? "-"}</td>
                 <td className="px-4 py-3">{player.role || "-"}</td>
               </tr>
             ))}

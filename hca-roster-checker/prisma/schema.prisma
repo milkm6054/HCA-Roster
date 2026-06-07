@@ -140,8 +140,13 @@ model MatchPlayer {
   playerId       String?
   rawSteamId     String
   steamId64      String?
+  displayName    String?
   kills          Int?
   deaths         Int?
+  killsPerMinute Float?
+  deathsPerMinute Float?
+  killDeathRatio Float?
+  timeSeconds    Int?
   role           String?
   sourceFileName String?
   createdAt      DateTime @default(now())
