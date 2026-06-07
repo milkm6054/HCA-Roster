@@ -37,8 +37,6 @@ export async function POST(
 
   const rows = await importExternalMatchStatsFromGameUrl({
     gameUrl: match.gameUrl,
-    axisTeamName: match.teamA.name,
-    alliesTeamName: match.teamB.name,
   });
 
   const summary = await checkMatchRoster({

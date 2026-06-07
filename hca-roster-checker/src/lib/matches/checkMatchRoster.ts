@@ -21,6 +21,83 @@ function normalizeTeamLabel(value: string): string {
   return value.trim().toLowerCase();
 }
 
+function inferExternalSideAssignments({
+  rows,
+  teamAId,
+  teamBId,
+  activeRosterByTeam,
+}: {
+  rows: Array<{
+    row: ParsedMatchStatsRow;
+    normalized: Extract<ReturnType<typeof normalizeSteamId>, { ok: true }>;
+  }>;
+  teamAId: string;
+  teamBId: string;
+  activeRosterByTeam: Map<string, Set<string>>;
+}) {
+  const sideScores = {
+    axis: { teamA: 0, teamB: 0 },
+    allies: { teamA: 0, teamB: 0 },
+  };
+
+  for (const { row, normalized } of rows) {
+    const label = normalizeTeamLabel(row.team);
+    const bucket =
+      label === "axis" ? sideScores.axis : label === "allies" || label === "allied" ? sideScores.allies : null;
+
+    if (!bucket) {
+      continue;
+    }
+
+    const steamId64 = normalized.steamId64;
+    if (activeRosterByTeam.get(teamAId)?.has(steamId64)) {
+      bucket.teamA += 1;
+    }
+    if (activeRosterByTeam.get(teamBId)?.has(steamId64)) {
+      bucket.teamB += 1;
+    }
+  }
+
+  const sideMap = new Map<string, string>();
+  const axisPref =
+    sideScores.axis.teamA === sideScores.axis.teamB
+      ? null
+      : sideScores.axis.teamA > sideScores.axis.teamB
+        ? teamAId
+        : teamBId;
+  const alliesPref =
+    sideScores.allies.teamA === sideScores.allies.teamB
+      ? null
+      : sideScores.allies.teamA > sideScores.allies.teamB
+        ? teamAId
+        : teamBId;
+
+  if (axisPref && alliesPref && axisPref !== alliesPref) {
+    sideMap.set("axis", axisPref);
+    sideMap.set("allies", alliesPref);
+    sideMap.set("allied", alliesPref);
+    return sideMap;
+  }
+
+  if (axisPref) {
+    sideMap.set("axis", axisPref);
+    const opposite = axisPref === teamAId ? teamBId : teamAId;
+    sideMap.set("allies", alliesPref ?? opposite);
+    sideMap.set("allied", alliesPref ?? opposite);
+    return sideMap;
+  }
+
+  if (alliesPref) {
+    sideMap.set("allies", alliesPref);
+    sideMap.set("allied", alliesPref);
+    const opposite = alliesPref === teamAId ? teamBId : teamAId;
+    sideMap.set("axis", axisPref ?? opposite);
+    return sideMap;
+  }
+
+  return sideMap;
+}
+
 export async function checkMatchRoster({
   matchId,
   rows,
@@ -90,6 +167,12 @@ export async function checkMatchRoster({
   let registeredPlayers = 0;
   let unregisteredPlayers = 0;
   let violationsCreated = 0;
+  const inferredSideAssignments = inferExternalSideAssignments({
+    rows: validNormalizedRows,
+    teamAId: match.teamAId,
+    teamBId: match.teamBId,
+    activeRosterByTeam,
+  });
 
   await prisma.$transaction(async (tx) => {
     const playerIdBySteamId64 = new Map<string, string>();
@@ -129,7 +212,15 @@ export async function checkMatchRoster({
     await tx.violation.deleteMany({ where: { matchId, type: ViolationType.UNREGISTERED_PLAYER } });
 
     for (const { row, normalized } of normalizedRows) {
-      const teamId = teamMap.get(normalizeTeamLabel(row.team));
+      const normalizedTeamLabel = normalizeTeamLabel(row.team);
+      const teamId =
+        teamMap.get(normalizedTeamLabel) ||
+        inferredSideAssignments.get(normalizedTeamLabel) ||
+        (normalizedTeamLabel === "axis"
+          ? match.teamAId
+          : normalizedTeamLabel === "allies" || normalizedTeamLabel === "allied"
+            ? match.teamBId
+            : undefined);
       const steamId64 = normalized.ok ? normalized.steamId64 : null;
 
       if (!teamId) {

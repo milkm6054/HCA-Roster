@@ -23,12 +23,8 @@ type ExternalScoreboardResponse = {
 
 export async function importExternalMatchStatsFromGameUrl({
   gameUrl,
-  axisTeamName,
-  alliesTeamName,
 }: {
   gameUrl: string;
-  axisTeamName: string;
-  alliesTeamName: string;
 }): Promise<ParsedMatchStatsRow[]> {
   let parsedUrl: URL;
 
@@ -66,7 +62,7 @@ export async function importExternalMatchStatsFromGameUrl({
     .filter((player) => (player.time_seconds || 0) > 15)
     .filter((player) => Boolean(player.player_id))
     .map((player, index) => ({
-      team: player.team?.side === "axis" ? axisTeamName : alliesTeamName,
+      team: player.team?.side?.trim().toLowerCase() || "unknown",
       steamId: player.player_id || "",
       displayName: player.player?.trim() || undefined,
       kills: player.kills,
