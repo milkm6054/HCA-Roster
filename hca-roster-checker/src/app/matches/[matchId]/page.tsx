@@ -26,6 +26,24 @@ type MatchData = {
   }>;
 };
 
+type StreamerCandidate = {
+  steamId: string;
+  displayName?: string | null;
+  team: string;
+  kills?: number | null;
+  deaths?: number | null;
+  kpd?: number | null;
+  kpm?: number | null;
+  dpm?: number | null;
+  timeSeconds?: number | null;
+};
+
+type StreamerPromptState = {
+  overflowCount: number;
+  totalPlayersFound: number;
+  candidates: StreamerCandidate[];
+};
+
 export default function MatchDetailPage() {
   const params = useParams<{ matchId: string }>();
   const matchId = params.matchId;
@@ -37,6 +55,8 @@ export default function MatchDetailPage() {
   const [uploadSummary, setUploadSummary] = useState<Record<string, unknown> | null>(null);
   const [error, setError] = useState("");
   const [busyImport, setBusyImport] = useState(false);
+  const [streamerPrompt, setStreamerPrompt] = useState<StreamerPromptState | null>(null);
+  const [selectedStreamerIds, setSelectedStreamerIds] = useState<string[]>([]);
 
   async function refreshMatch() {
     const [meRes, res] = await Promise.all([fetch("/api/auth/me"), fetch(`/api/matches/${matchId}`)]);
@@ -92,13 +112,26 @@ export default function MatchDetailPage() {
   async function importStatsFromLink() {
     setBusyImport(true);
     setError("");
+    setStreamerPrompt(null);
 
     try {
       const res = await fetch(`/api/matches/${matchId}/stats/import-link`, {
         method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ excludedSteamIds: [] }),
       });
       const data = await res.json();
       if (!res.ok) {
+        if (data.needsStreamerSelection) {
+          setStreamerPrompt({
+            overflowCount: data.overflowCount,
+            totalPlayersFound: data.totalPlayersFound,
+            candidates: data.candidates || [],
+          });
+          setSelectedStreamerIds([]);
+        }
         setError(data.error || "Failed to import stats from the game link.");
         return;
       }
@@ -108,6 +141,48 @@ export default function MatchDetailPage() {
     } finally {
       setBusyImport(false);
     }
+  }
+
+  async function confirmStreamerSelection() {
+    if (!streamerPrompt) return;
+
+    setBusyImport(true);
+    setError("");
+
+    try {
+      const res = await fetch(`/api/matches/${matchId}/stats/import-link`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ excludedSteamIds: selectedStreamerIds }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (data.needsStreamerSelection) {
+          setStreamerPrompt({
+            overflowCount: data.overflowCount,
+            totalPlayersFound: data.totalPlayersFound,
+            candidates: data.candidates || [],
+          });
+        }
+        setError(data.error || "Failed to import stats from the game link.");
+        return;
+      }
+
+      setStreamerPrompt(null);
+      setSelectedStreamerIds([]);
+      setUploadSummary(data);
+      await refreshMatch();
+    } finally {
+      setBusyImport(false);
+    }
+  }
+
+  function toggleStreamerSelection(steamId: string) {
+    setSelectedStreamerIds((current) =>
+      current.includes(steamId) ? current.filter((value) => value !== steamId) : [...current, steamId],
+    );
   }
 
   return (
@@ -166,6 +241,71 @@ export default function MatchDetailPage() {
       ) : null}
 
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
+
+      {streamerPrompt ? (
+        <div className="space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-slate-900">
+          <div>
+            <h3 className="font-semibold">Choose streamer accounts to exclude</h3>
+            <p className="mt-1 text-slate-700">
+              This game has {streamerPrompt.totalPlayersFound} players. Select{" "}
+              {streamerPrompt.overflowCount} streamer{streamerPrompt.overflowCount === 1 ? "" : "s"} so we only store the 98 match participants.
+            </p>
+          </div>
+
+          <div className="max-h-80 overflow-auto rounded border border-amber-200 bg-white">
+            <table className="w-full border-collapse text-left text-sm">
+              <thead className="bg-amber-100">
+                <tr>
+                  <th className="px-3 py-2">Exclude</th>
+                  <th className="px-3 py-2">Player</th>
+                  <th className="px-3 py-2">Steam ID</th>
+                  <th className="px-3 py-2">Side</th>
+                  <th className="px-3 py-2">K</th>
+                  <th className="px-3 py-2">D</th>
+                  <th className="px-3 py-2">KPM</th>
+                  <th className="px-3 py-2">Time</th>
+                </tr>
+              </thead>
+              <tbody>
+                {streamerPrompt.candidates.map((candidate) => (
+                  <tr key={candidate.steamId} className="border-t border-amber-100">
+                    <td className="px-3 py-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedStreamerIds.includes(candidate.steamId)}
+                        onChange={() => toggleStreamerSelection(candidate.steamId)}
+                      />
+                    </td>
+                    <td className="px-3 py-2">{candidate.displayName || "-"}</td>
+                    <td className="px-3 py-2 font-mono text-xs">{candidate.steamId}</td>
+                    <td className="px-3 py-2 capitalize">{candidate.team}</td>
+                    <td className="px-3 py-2">{candidate.kills ?? "-"}</td>
+                    <td className="px-3 py-2">{candidate.deaths ?? "-"}</td>
+                    <td className="px-3 py-2">{candidate.kpm?.toFixed(2) ?? "-"}</td>
+                    <td className="px-3 py-2">
+                      {candidate.timeSeconds ? `${Math.round(candidate.timeSeconds / 60)} min` : "-"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              className="bg-slate-900 px-4 py-2 text-white disabled:opacity-50"
+              disabled={busyImport || selectedStreamerIds.length !== streamerPrompt.overflowCount}
+              onClick={confirmStreamerSelection}
+            >
+              {busyImport ? "Importing..." : `Exclude ${streamerPrompt.overflowCount} and import`}
+            </button>
+            <p className="text-xs text-slate-600">
+              Selected {selectedStreamerIds.length} of {streamerPrompt.overflowCount}
+            </p>
+          </div>
+        </div>
+      ) : null}
 
       {uploadSummary ? (
         <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm">
