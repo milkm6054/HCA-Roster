@@ -17,6 +17,25 @@ type Match = {
   teamB: Team;
   _count: { matchPlayers: number; violations: number };
 };
+type StreamerCandidate = {
+  steamId: string;
+  displayName?: string | null;
+  team: string;
+  kills?: number | null;
+  deaths?: number | null;
+  kpd?: number | null;
+  kpm?: number | null;
+  dpm?: number | null;
+  timeSeconds?: number | null;
+};
+type CreateMatchImportPrompt = {
+  matchId: string;
+  matchupLabel: string;
+  overflowCount: number;
+  totalPlayersFound: number;
+  candidates: StreamerCandidate[];
+  suggestedSteamIds: string[];
+};
 
 export default function MatchesPage() {
   const [teams, setTeams] = useState<Team[]>([]);
@@ -30,6 +49,9 @@ export default function MatchesPage() {
   const [gameUrl, setGameUrl] = useState("");
   const [busyMatchId, setBusyMatchId] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [importPrompt, setImportPrompt] = useState<CreateMatchImportPrompt | null>(null);
+  const [selectedStreamerIds, setSelectedStreamerIds] = useState<string[]>([]);
+  const [busyPromptImport, setBusyPromptImport] = useState(false);
 
   async function refreshData() {
     const [meRes, teamsRes, matchesRes] = await Promise.all([
@@ -93,6 +115,8 @@ export default function MatchesPage() {
   async function createMatch(event: React.FormEvent) {
     event.preventDefault();
     setError("");
+    setImportPrompt(null);
+    setSelectedStreamerIds([]);
 
     const res = await fetch("/api/matches", {
       method: "POST",
@@ -107,8 +131,67 @@ export default function MatchesPage() {
     }
 
     await refreshData();
+    if (data.needsStreamerSelection && data.match) {
+      const suggestedSteamIds = (data.suggestedSteamIds || []).slice(0, data.overflowCount);
+      const axisTeamName = teams.find((team) => team.id === teamAId)?.name || "Axis";
+      const alliesTeamName = teams.find((team) => team.id === teamBId)?.name || "Allies";
+      setImportPrompt({
+        matchId: data.match.id,
+        matchupLabel: `${axisTeamName} vs ${alliesTeamName}`,
+        overflowCount: data.overflowCount,
+        totalPlayersFound: data.totalPlayersFound,
+        candidates: data.candidates || [],
+        suggestedSteamIds,
+      });
+      setSelectedStreamerIds(suggestedSteamIds);
+    }
     setMidpointName("");
     setGameUrl("");
+  }
+
+  async function confirmCreatedMatchImport() {
+    if (!importPrompt) return;
+
+    setBusyPromptImport(true);
+    setError("");
+
+    try {
+      const res = await fetch(`/api/matches/${importPrompt.matchId}/stats/import-link`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ excludedSteamIds: selectedStreamerIds }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Failed to import stats for the new match.");
+        if (data.needsStreamerSelection) {
+          const suggestedSteamIds = (data.suggestedSteamIds || []).slice(0, data.overflowCount);
+          setImportPrompt({
+            matchId: importPrompt.matchId,
+            matchupLabel: importPrompt.matchupLabel,
+            overflowCount: data.overflowCount,
+            totalPlayersFound: data.totalPlayersFound,
+            candidates: data.candidates || [],
+            suggestedSteamIds,
+          });
+          setSelectedStreamerIds(suggestedSteamIds);
+        }
+        return;
+      }
+
+      setImportPrompt(null);
+      setSelectedStreamerIds([]);
+      await refreshData();
+    } finally {
+      setBusyPromptImport(false);
+    }
+  }
+
+  function toggleStreamerSelection(steamId: string) {
+    setSelectedStreamerIds((current) =>
+      current.includes(steamId) ? current.filter((value) => value !== steamId) : [...current, steamId],
+    );
   }
 
   async function deleteMatch(match: Match) {
@@ -240,6 +323,76 @@ export default function MatchesPage() {
       {error ? (
         <div className="rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
           {error}
+        </div>
+      ) : null}
+
+      {importPrompt ? (
+        <div className="space-y-3 rounded-[24px] border border-amber-400/20 bg-amber-500/10 p-5 text-sm text-amber-50">
+          <div>
+            <h2 className="text-lg font-semibold">Finish automatic match import</h2>
+            <p className="mt-1 text-amber-100/90">
+              {importPrompt.matchupLabel} was created with {importPrompt.totalPlayersFound} linked players. Select{" "}
+              {importPrompt.overflowCount} streamer{importPrompt.overflowCount === 1 ? "" : "s"} to exclude so the remaining 98 players are stored automatically.
+            </p>
+            {importPrompt.suggestedSteamIds.length ? (
+              <p className="mt-1 text-xs text-amber-100/80">
+                Zero-kill players are preselected as the likely streamer account{importPrompt.suggestedSteamIds.length === 1 ? "" : "s"}.
+              </p>
+            ) : null}
+          </div>
+
+          <div className="max-h-80 overflow-auto rounded-2xl border border-white/10 bg-black/10">
+            <table className="w-full border-collapse text-left text-sm">
+              <thead className="bg-white/5 text-amber-100/80">
+                <tr>
+                  <th className="px-3 py-2">Exclude</th>
+                  <th className="px-3 py-2">Player</th>
+                  <th className="px-3 py-2">Steam ID</th>
+                  <th className="px-3 py-2">Side</th>
+                  <th className="px-3 py-2">K</th>
+                  <th className="px-3 py-2">D</th>
+                  <th className="px-3 py-2">KPM</th>
+                  <th className="px-3 py-2">Time</th>
+                </tr>
+              </thead>
+              <tbody>
+                {importPrompt.candidates.map((candidate) => (
+                  <tr key={candidate.steamId} className="border-t border-white/8">
+                    <td className="px-3 py-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedStreamerIds.includes(candidate.steamId)}
+                        onChange={() => toggleStreamerSelection(candidate.steamId)}
+                      />
+                    </td>
+                    <td className="px-3 py-2">{candidate.displayName || "-"}</td>
+                    <td className="px-3 py-2 font-mono text-xs">{candidate.steamId}</td>
+                    <td className="px-3 py-2 capitalize">{candidate.team}</td>
+                    <td className="px-3 py-2">{candidate.kills ?? "-"}</td>
+                    <td className="px-3 py-2">{candidate.deaths ?? "-"}</td>
+                    <td className="px-3 py-2">{candidate.kpm?.toFixed(2) ?? "-"}</td>
+                    <td className="px-3 py-2">
+                      {candidate.timeSeconds ? `${Math.round(candidate.timeSeconds / 60)} min` : "-"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              className="border-cyan-400/30 bg-cyan-400/90 px-4 py-2.5 text-slate-950 shadow-lg shadow-cyan-500/20 disabled:opacity-50"
+              disabled={busyPromptImport || selectedStreamerIds.length !== importPrompt.overflowCount}
+              onClick={confirmCreatedMatchImport}
+            >
+              {busyPromptImport ? "Importing..." : `Exclude ${importPrompt.overflowCount} and finish import`}
+            </button>
+            <p className="text-xs text-amber-100/80">
+              Selected {selectedStreamerIds.length} of {importPrompt.overflowCount}
+            </p>
+          </div>
         </div>
       ) : null}
 

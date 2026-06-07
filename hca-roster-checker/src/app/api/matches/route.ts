@@ -4,6 +4,8 @@ import { createAuditLog } from "@/lib/audit/auditLog";
 import { isOrga, requireApiSession } from "@/lib/auth/guards";
 import { getActor } from "@/lib/auth/getActor";
 import { HLL_MAPS } from "@/lib/matches/hllMaps";
+import { processLinkedMatchImport } from "@/lib/matches/processLinkedMatchImport";
+import { queueNotification } from "@/lib/notifications/notifications";
 
 export const dynamic = "force-dynamic";
 
@@ -105,5 +107,58 @@ export async function POST(request: Request) {
     },
   });
 
-  return NextResponse.json({ match }, { status: 201 });
+  if (!match.gameUrl) {
+    return NextResponse.json({ match }, { status: 201 });
+  }
+
+  const importResult = await processLinkedMatchImport({
+    matchId: match.id,
+    gameUrl: match.gameUrl,
+    excludedSteamIds: [],
+  });
+
+  if (importResult.status === "needs_streamer_selection") {
+    return NextResponse.json(
+      {
+        match,
+        needsStreamerSelection: true,
+        overflowCount: importResult.overflowCount,
+        totalPlayersFound: importResult.totalPlayersFound,
+        suggestedSteamIds: importResult.suggestedSteamIds,
+        candidates: importResult.candidates,
+      },
+      { status: 201 },
+    );
+  }
+
+  await createAuditLog({
+    action: "MATCH_STATS_IMPORTED_FROM_LINK",
+    actor: await getActor(request),
+    entityType: "Match",
+    entityId: match.id,
+    details: {
+      gameUrl: match.gameUrl,
+      totalRows: importResult.totalRows,
+      excludedSteamIds: importResult.excludedSteamIds,
+      summary: importResult.summary,
+      automatic: true,
+    },
+  });
+
+  await queueNotification({
+    type: "MATCH_VIOLATION_ALERT",
+    payload: {
+      matchId: match.id,
+      summary: importResult.summary,
+    },
+  });
+
+  return NextResponse.json(
+    {
+      match,
+      autoImported: true,
+      summary: importResult.summary,
+    },
+    { status: 201 },
+  );
 }
