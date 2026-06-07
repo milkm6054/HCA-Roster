@@ -119,6 +119,9 @@ model Match {
   week         Int
   teamAId      String
   teamBId      String
+  mapName      String?
+  midpointName String?
+  gameUrl      String?
   playedAt     DateTime?
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt

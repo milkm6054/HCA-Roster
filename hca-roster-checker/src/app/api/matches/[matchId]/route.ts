@@ -78,6 +78,9 @@ export async function DELETE(
       week: match.week,
       teamA: match.teamA.name,
       teamB: match.teamB.name,
+      mapName: match.mapName,
+      midpointName: match.midpointName,
+      gameUrl: match.gameUrl,
     },
   });
 

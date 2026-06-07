@@ -6,6 +6,9 @@ import { useParams } from "next/navigation";
 type MatchData = {
   id: string;
   week: number;
+  mapName?: string | null;
+  midpointName?: string | null;
+  gameUrl?: string | null;
   teamA: { name: string; tag?: string | null };
   teamB: { name: string; tag?: string | null };
   matchPlayers: Array<{
@@ -75,6 +78,37 @@ export default function MatchDetailPage() {
       <h1 className="text-2xl font-semibold tracking-tight">
         Match week {match?.week}: {match?.teamA.name} vs {match?.teamB.name}
       </h1>
+
+      <div className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 md:grid-cols-4">
+        <div>
+          <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Axis</p>
+          <p className="mt-1 font-medium">{match?.teamA.name || "-"}</p>
+        </div>
+        <div>
+          <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Allies</p>
+          <p className="mt-1 font-medium">{match?.teamB.name || "-"}</p>
+        </div>
+        <div>
+          <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Map</p>
+          <p className="mt-1 font-medium">{match?.mapName || "-"}</p>
+        </div>
+        <div>
+          <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Midpoint</p>
+          <p className="mt-1 font-medium">{match?.midpointName || "-"}</p>
+        </div>
+        {match?.gameUrl ? (
+          <div className="md:col-span-4">
+            <a
+              href={match.gameUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="text-sm text-slate-700 underline underline-offset-4"
+            >
+              Open linked game record
+            </a>
+          </div>
+        ) : null}
+      </div>
 
       <form onSubmit={uploadStats} className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
         <h2 className="text-lg font-semibold">Upload match stats CSV</h2>

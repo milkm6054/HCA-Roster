@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { createAuditLog } from "@/lib/audit/auditLog";
 import { isOrga, requireApiSession } from "@/lib/auth/guards";
 import { getActor } from "@/lib/auth/getActor";
+import { HLL_MAPS } from "@/lib/matches/hllMaps";
 
 export const dynamic = "force-dynamic";
 
@@ -41,12 +42,15 @@ export async function POST(request: Request) {
     week?: number;
     teamAId?: string;
     teamBId?: string;
+    mapName?: string;
+    midpointName?: string;
+    gameUrl?: string;
     playedAt?: string;
   };
 
-  if (!body.week || !body.teamAId || !body.teamBId) {
+  if (!body.week || !body.teamAId || !body.teamBId || !body.mapName || !body.midpointName?.trim()) {
     return NextResponse.json(
-      { error: "week, teamAId, and teamBId are required." },
+      { error: "week, axis team, allies team, map, and midpoint are required." },
       { status: 400 },
     );
   }
@@ -58,11 +62,30 @@ export async function POST(request: Request) {
     );
   }
 
+  if (!HLL_MAPS.includes(body.mapName as (typeof HLL_MAPS)[number])) {
+    return NextResponse.json({ error: "Please choose a valid HLL map." }, { status: 400 });
+  }
+
+  const gameUrl = body.gameUrl?.trim();
+  if (gameUrl) {
+    try {
+      const parsedUrl = new URL(gameUrl);
+      if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+        throw new Error("invalid");
+      }
+    } catch {
+      return NextResponse.json({ error: "Game link must be a valid http or https URL." }, { status: 400 });
+    }
+  }
+
   const match = await prisma.match.create({
     data: {
       week: Number(body.week),
       teamAId: body.teamAId,
       teamBId: body.teamBId,
+      mapName: body.mapName,
+      midpointName: body.midpointName.trim(),
+      gameUrl: gameUrl || null,
       playedAt: body.playedAt ? new Date(body.playedAt) : null,
     },
   });
@@ -72,6 +95,12 @@ export async function POST(request: Request) {
     actor: await getActor(request),
     entityType: "Match",
     entityId: match.id,
+    details: {
+      week: match.week,
+      mapName: match.mapName,
+      midpointName: match.midpointName,
+      gameUrl: match.gameUrl,
+    },
   });
 
   return NextResponse.json({ match }, { status: 201 });

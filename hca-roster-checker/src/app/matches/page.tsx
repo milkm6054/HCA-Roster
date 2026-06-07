@@ -2,11 +2,15 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { HLL_MAPS } from "@/lib/matches/hllMaps";
 
 type Team = { id: string; name: string; tag?: string | null };
 type Match = {
   id: string;
   week: number;
+  mapName?: string | null;
+  midpointName?: string | null;
+  gameUrl?: string | null;
   playedAt?: string | null;
   teamA: Team;
   teamB: Team;
@@ -19,6 +23,9 @@ export default function MatchesPage() {
   const [week, setWeek] = useState(1);
   const [teamAId, setTeamAId] = useState("");
   const [teamBId, setTeamBId] = useState("");
+  const [mapName, setMapName] = useState<(typeof HLL_MAPS)[number]>(HLL_MAPS[0]);
+  const [midpointName, setMidpointName] = useState("");
+  const [gameUrl, setGameUrl] = useState("");
   const [busyMatchId, setBusyMatchId] = useState<string | null>(null);
   const [error, setError] = useState("");
 
@@ -82,7 +89,7 @@ export default function MatchesPage() {
     const res = await fetch("/api/matches", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ week, teamAId, teamBId }),
+      body: JSON.stringify({ week, teamAId, teamBId, mapName, midpointName, gameUrl }),
     });
 
     const data = await res.json();
@@ -92,6 +99,8 @@ export default function MatchesPage() {
     }
 
     await refreshData();
+    setMidpointName("");
+    setGameUrl("");
   }
 
   async function deleteMatch(match: Match) {
@@ -144,7 +153,7 @@ export default function MatchesPage() {
         </div>
       </div>
 
-      <form onSubmit={createMatch} className="grid gap-3 rounded-[24px] border border-white/10 bg-[var(--panel)]/85 p-5 shadow-[var(--shadow)] backdrop-blur-xl md:grid-cols-5">
+      <form onSubmit={createMatch} className="grid gap-3 rounded-[24px] border border-white/10 bg-[var(--panel)]/85 p-5 shadow-[var(--shadow)] backdrop-blur-xl md:grid-cols-6">
         <label className="space-y-2">
           <span className="text-xs font-medium uppercase tracking-[0.16em] text-[var(--muted)]">Week</span>
           <input
@@ -157,9 +166,9 @@ export default function MatchesPage() {
         </label>
 
         <label className="space-y-2">
-          <span className="text-xs font-medium uppercase tracking-[0.16em] text-[var(--muted)]">Team A</span>
+          <span className="text-xs font-medium uppercase tracking-[0.16em] text-[var(--muted)]">Axis</span>
           <select value={teamAId} onChange={(e) => setTeamAId(e.target.value)} required>
-            <option value="">Select Team A</option>
+            <option value="">Select Axis team</option>
             {teams.map((team) => (
               <option key={team.id} value={team.id}>
                 {team.name}
@@ -169,9 +178,9 @@ export default function MatchesPage() {
         </label>
 
         <label className="space-y-2">
-          <span className="text-xs font-medium uppercase tracking-[0.16em] text-[var(--muted)]">Team B</span>
+          <span className="text-xs font-medium uppercase tracking-[0.16em] text-[var(--muted)]">Allies</span>
           <select value={teamBId} onChange={(e) => setTeamBId(e.target.value)} required>
-            <option value="">Select Team B</option>
+            <option value="">Select Allies team</option>
             {teams.map((team) => (
               <option key={team.id} value={team.id}>
                 {team.name}
@@ -180,7 +189,38 @@ export default function MatchesPage() {
           </select>
         </label>
 
-        <div className="flex items-end md:col-span-2">
+        <label className="space-y-2">
+          <span className="text-xs font-medium uppercase tracking-[0.16em] text-[var(--muted)]">Map</span>
+          <select value={mapName} onChange={(e) => setMapName(e.target.value as (typeof HLL_MAPS)[number])} required>
+            {HLL_MAPS.map((map) => (
+              <option key={map} value={map}>
+                {map}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="space-y-2">
+          <span className="text-xs font-medium uppercase tracking-[0.16em] text-[var(--muted)]">Midpoint</span>
+          <input
+            value={midpointName}
+            onChange={(e) => setMidpointName(e.target.value)}
+            placeholder="Official strongpoint name"
+            required
+          />
+        </label>
+
+        <label className="space-y-2">
+          <span className="text-xs font-medium uppercase tracking-[0.16em] text-[var(--muted)]">Game link</span>
+          <input
+            type="url"
+            value={gameUrl}
+            onChange={(e) => setGameUrl(e.target.value)}
+            placeholder="http://95.216.175.159:7014/games/33023"
+          />
+        </label>
+
+        <div className="flex items-end md:col-span-6">
           <button className="w-full border-cyan-400/30 bg-cyan-400/90 px-4 py-2.5 text-slate-950 shadow-lg shadow-cyan-500/20">
             Create match
           </button>
@@ -198,9 +238,12 @@ export default function MatchesPage() {
           <thead className="bg-white/5 text-[var(--muted)]">
             <tr>
               <th className="px-4 py-3">Week</th>
-              <th className="px-4 py-3">Teams</th>
+              <th className="px-4 py-3">Sides</th>
+              <th className="px-4 py-3">Map</th>
+              <th className="px-4 py-3">Midpoint</th>
               <th className="px-4 py-3">Players logged</th>
               <th className="px-4 py-3">Violations</th>
+              <th className="px-4 py-3">Link</th>
               <th className="px-4 py-3">Open</th>
               <th className="px-4 py-3">Actions</th>
             </tr>
@@ -214,10 +257,23 @@ export default function MatchesPage() {
                   </span>
                 </td>
                 <td className="px-4 py-3">
-                  {match.teamA.name} vs {match.teamB.name}
+                  Axis: {match.teamA.name}
+                  <br />
+                  Allies: {match.teamB.name}
                 </td>
+                <td className="px-4 py-3">{match.mapName || "-"}</td>
+                <td className="px-4 py-3">{match.midpointName || "-"}</td>
                 <td className="px-4 py-3">{match._count.matchPlayers}</td>
                 <td className="px-4 py-3">{match._count.violations}</td>
+                <td className="px-4 py-3">
+                  {match.gameUrl ? (
+                    <a href={match.gameUrl} target="_blank" rel="noreferrer" className="text-cyan-400 underline decoration-cyan-400/50 underline-offset-4">
+                      View
+                    </a>
+                  ) : (
+                    "-"
+                  )}
+                </td>
                 <td className="px-4 py-3">
                   <Link href={`/matches/${match.id}`} className="text-cyan-400 underline decoration-cyan-400/50 underline-offset-4">
                     Manage
@@ -237,7 +293,7 @@ export default function MatchesPage() {
             ))}
             {matches.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-[var(--muted)]">
+                <td colSpan={9} className="px-4 py-10 text-center text-[var(--muted)]">
                   No matches created yet.
                 </td>
               </tr>

@@ -1,6 +1,7 @@
 import { Prisma, ViolationSeverity, ViolationStatus, ViolationType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { ParsedMatchStatsRow } from "@/lib/matches/parseMatchStatsCsv";
+import { estimateSteamAccountCreatedAt } from "@/lib/steam/accountAge";
 import { normalizeSteamId } from "@/lib/steam/steamIds";
 
 export type MatchRosterCheckInput = {
@@ -73,28 +74,60 @@ export async function checkMatchRoster({
     new Set(match.teamB.rosterEntries.map((entry) => entry.player.steamId64)),
   );
 
-  const allSteamIds = rows
-    .map((row) => normalizeSteamId(row.steamId))
-    .filter((res): res is Extract<typeof res, { ok: true }> => res.ok)
-    .map((res) => res.steamId64);
-
-  const knownPlayers = await prisma.player.findMany({
-    where: { steamId64: { in: [...new Set(allSteamIds)] } },
-    select: { id: true, steamId64: true },
-  });
-
-  const playerIdBySteamId64 = new Map(knownPlayers.map((p) => [p.steamId64, p.id]));
+  const normalizedRows = rows.map((row) => ({
+    row,
+    normalized: normalizeSteamId(row.steamId),
+  }));
+  const validNormalizedRows = normalizedRows.filter(
+    (
+      value,
+    ): value is {
+      row: ParsedMatchStatsRow;
+      normalized: Extract<ReturnType<typeof normalizeSteamId>, { ok: true }>;
+    } => value.normalized.ok,
+  );
 
   let registeredPlayers = 0;
   let unregisteredPlayers = 0;
   let violationsCreated = 0;
 
   await prisma.$transaction(async (tx) => {
-    await tx.matchPlayer.deleteMany({ where: { matchId } });
+    const playerIdBySteamId64 = new Map<string, string>();
 
-    for (const row of rows) {
+    for (const normalizedRow of validNormalizedRows) {
+      const steamId64 = normalizedRow.normalized.steamId64;
+      if (playerIdBySteamId64.has(steamId64)) {
+        continue;
+      }
+
+      const age = estimateSteamAccountCreatedAt(steamId64);
+      const player = await tx.player.upsert({
+        where: { steamId64 },
+        create: {
+          steamId64,
+          steamId3: normalizedRow.normalized.steamId3,
+          estimatedCreatedAt: age.estimatedCreatedAt,
+          accountAgeRisk: age.accountAgeRisk,
+        },
+        update: {
+          steamId3: normalizedRow.normalized.steamId3,
+          estimatedCreatedAt: age.estimatedCreatedAt,
+          accountAgeRisk: age.accountAgeRisk,
+        },
+        select: {
+          id: true,
+          steamId64: true,
+        },
+      });
+
+      playerIdBySteamId64.set(player.steamId64, player.id);
+    }
+
+    await tx.matchPlayer.deleteMany({ where: { matchId } });
+    await tx.violation.deleteMany({ where: { matchId, type: ViolationType.UNREGISTERED_PLAYER } });
+
+    for (const { row, normalized } of normalizedRows) {
       const teamId = teamMap.get(normalizeTeamLabel(row.team));
-      const normalized = normalizeSteamId(row.steamId);
       const steamId64 = normalized.ok ? normalized.steamId64 : null;
 
       if (!teamId) {
