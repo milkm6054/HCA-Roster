@@ -253,23 +253,23 @@ export default function MatchDetailPage() {
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
       {streamerPrompt ? (
-        <div className="space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-slate-900">
+        <div className="space-y-3 rounded-[24px] border border-amber-400/20 bg-[var(--panel)]/92 p-5 text-sm text-[var(--foreground)] shadow-[var(--shadow)] backdrop-blur-xl">
           <div>
-            <h3 className="font-semibold">Choose streamer accounts to exclude</h3>
-            <p className="mt-1 text-slate-700">
+            <h3 className="font-semibold text-amber-200">Choose streamer accounts to exclude</h3>
+            <p className="mt-1 text-[var(--muted)]">
               This game has {streamerPrompt.totalPlayersFound} players. Select{" "}
               {streamerPrompt.overflowCount} streamer{streamerPrompt.overflowCount === 1 ? "" : "s"} so we only store the 98 match participants.
             </p>
             {streamerPrompt.suggestedSteamIds.length ? (
-              <p className="mt-1 text-xs text-slate-600">
+              <p className="mt-1 text-xs text-amber-200/80">
                 Zero-kill players have been preselected as the likely streamer account{streamerPrompt.suggestedSteamIds.length === 1 ? "" : "s"}.
               </p>
             ) : null}
           </div>
 
-          <div className="max-h-80 overflow-auto rounded border border-amber-200 bg-white">
+          <div className="max-h-80 overflow-auto rounded-2xl border border-white/10 bg-black/10">
             <table className="w-full border-collapse text-left text-sm">
-              <thead className="bg-amber-100">
+              <thead className="bg-white/5 text-amber-100/90">
                 <tr>
                   <th className="px-3 py-2">Exclude</th>
                   <th className="px-3 py-2">Player</th>
@@ -283,7 +283,7 @@ export default function MatchDetailPage() {
               </thead>
               <tbody>
                 {streamerPrompt.candidates.map((candidate) => (
-                  <tr key={candidate.steamId} className="border-t border-amber-100">
+                  <tr key={candidate.steamId} className="border-t border-white/8">
                     <td className="px-3 py-2">
                       <input
                         type="checkbox"
@@ -293,7 +293,7 @@ export default function MatchDetailPage() {
                     </td>
                     <td className="px-3 py-2">{candidate.displayName || "-"}</td>
                     <td className="px-3 py-2 font-mono text-xs">{candidate.steamId}</td>
-                    <td className="px-3 py-2 capitalize">{candidate.team}</td>
+                    <td className="px-3 py-2 capitalize text-[var(--muted)]">{candidate.team}</td>
                     <td className="px-3 py-2">{candidate.kills ?? "-"}</td>
                     <td className="px-3 py-2">{candidate.deaths ?? "-"}</td>
                     <td className="px-3 py-2">{candidate.kpm?.toFixed(2) ?? "-"}</td>
@@ -309,13 +309,13 @@ export default function MatchDetailPage() {
           <div className="flex flex-wrap items-center gap-3">
             <button
               type="button"
-              className="bg-slate-900 px-4 py-2 text-white disabled:opacity-50"
+              className="border-cyan-400/30 bg-cyan-400/90 px-4 py-2.5 text-slate-950 shadow-lg shadow-cyan-500/20 disabled:opacity-50"
               disabled={busyImport || selectedStreamerIds.length !== streamerPrompt.overflowCount}
               onClick={confirmStreamerSelection}
             >
               {busyImport ? "Importing..." : `Exclude ${streamerPrompt.overflowCount} and import`}
             </button>
-            <p className="text-xs text-slate-600">
+            <p className="text-xs text-amber-200/80">
               Selected {selectedStreamerIds.length} of {streamerPrompt.overflowCount}
             </p>
           </div>

@@ -327,15 +327,15 @@ export default function MatchesPage() {
       ) : null}
 
       {importPrompt ? (
-        <div className="space-y-3 rounded-[24px] border border-amber-400/20 bg-amber-500/10 p-5 text-sm text-amber-50">
+        <div className="space-y-3 rounded-[24px] border border-amber-400/20 bg-[var(--panel)]/92 p-5 text-sm text-[var(--foreground)] shadow-[var(--shadow)] backdrop-blur-xl">
           <div>
-            <h2 className="text-lg font-semibold">Finish automatic match import</h2>
-            <p className="mt-1 text-amber-100/90">
+            <h2 className="text-lg font-semibold text-amber-200">Finish automatic match import</h2>
+            <p className="mt-1 text-[var(--muted)]">
               {importPrompt.matchupLabel} was created with {importPrompt.totalPlayersFound} linked players. Select{" "}
               {importPrompt.overflowCount} streamer{importPrompt.overflowCount === 1 ? "" : "s"} to exclude so the remaining 98 players are stored automatically.
             </p>
             {importPrompt.suggestedSteamIds.length ? (
-              <p className="mt-1 text-xs text-amber-100/80">
+              <p className="mt-1 text-xs text-amber-200/80">
                 Zero-kill players are preselected as the likely streamer account{importPrompt.suggestedSteamIds.length === 1 ? "" : "s"}.
               </p>
             ) : null}
@@ -367,7 +367,7 @@ export default function MatchesPage() {
                     </td>
                     <td className="px-3 py-2">{candidate.displayName || "-"}</td>
                     <td className="px-3 py-2 font-mono text-xs">{candidate.steamId}</td>
-                    <td className="px-3 py-2 capitalize">{candidate.team}</td>
+                    <td className="px-3 py-2 capitalize text-[var(--muted)]">{candidate.team}</td>
                     <td className="px-3 py-2">{candidate.kills ?? "-"}</td>
                     <td className="px-3 py-2">{candidate.deaths ?? "-"}</td>
                     <td className="px-3 py-2">{candidate.kpm?.toFixed(2) ?? "-"}</td>
@@ -389,7 +389,7 @@ export default function MatchesPage() {
             >
               {busyPromptImport ? "Importing..." : `Exclude ${importPrompt.overflowCount} and finish import`}
             </button>
-            <p className="text-xs text-amber-100/80">
+            <p className="text-xs text-amber-200/80">
               Selected {selectedStreamerIds.length} of {importPrompt.overflowCount}
             </p>
           </div>
