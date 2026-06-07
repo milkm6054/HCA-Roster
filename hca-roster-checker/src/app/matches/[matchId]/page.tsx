@@ -42,6 +42,7 @@ type StreamerPromptState = {
   overflowCount: number;
   totalPlayersFound: number;
   candidates: StreamerCandidate[];
+  suggestedSteamIds: string[];
 };
 
 export default function MatchDetailPage() {
@@ -57,6 +58,10 @@ export default function MatchDetailPage() {
   const [busyImport, setBusyImport] = useState(false);
   const [streamerPrompt, setStreamerPrompt] = useState<StreamerPromptState | null>(null);
   const [selectedStreamerIds, setSelectedStreamerIds] = useState<string[]>([]);
+
+  function getSuggestedStreamerIds(overflowCount: number, suggestedSteamIds: string[] = []) {
+    return suggestedSteamIds.slice(0, overflowCount);
+  }
 
   async function refreshMatch() {
     const [meRes, res] = await Promise.all([fetch("/api/auth/me"), fetch(`/api/matches/${matchId}`)]);
@@ -125,12 +130,14 @@ export default function MatchDetailPage() {
       const data = await res.json();
       if (!res.ok) {
         if (data.needsStreamerSelection) {
+          const suggestedSteamIds = getSuggestedStreamerIds(data.overflowCount, data.suggestedSteamIds || []);
           setStreamerPrompt({
             overflowCount: data.overflowCount,
             totalPlayersFound: data.totalPlayersFound,
             candidates: data.candidates || [],
+            suggestedSteamIds,
           });
-          setSelectedStreamerIds([]);
+          setSelectedStreamerIds(suggestedSteamIds);
         }
         setError(data.error || "Failed to import stats from the game link.");
         return;
@@ -160,11 +167,14 @@ export default function MatchDetailPage() {
       const data = await res.json();
       if (!res.ok) {
         if (data.needsStreamerSelection) {
+          const suggestedSteamIds = getSuggestedStreamerIds(data.overflowCount, data.suggestedSteamIds || []);
           setStreamerPrompt({
             overflowCount: data.overflowCount,
             totalPlayersFound: data.totalPlayersFound,
             candidates: data.candidates || [],
+            suggestedSteamIds,
           });
+          setSelectedStreamerIds(suggestedSteamIds);
         }
         setError(data.error || "Failed to import stats from the game link.");
         return;
@@ -250,6 +260,11 @@ export default function MatchDetailPage() {
               This game has {streamerPrompt.totalPlayersFound} players. Select{" "}
               {streamerPrompt.overflowCount} streamer{streamerPrompt.overflowCount === 1 ? "" : "s"} so we only store the 98 match participants.
             </p>
+            {streamerPrompt.suggestedSteamIds.length ? (
+              <p className="mt-1 text-xs text-slate-600">
+                Zero-kill players have been preselected as the likely streamer account{streamerPrompt.suggestedSteamIds.length === 1 ? "" : "s"}.
+              </p>
+            ) : null}
           </div>
 
           <div className="max-h-80 overflow-auto rounded border border-amber-200 bg-white">

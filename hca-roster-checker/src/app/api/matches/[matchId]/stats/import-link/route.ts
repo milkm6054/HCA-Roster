@@ -9,6 +9,45 @@ import { prisma } from "@/lib/prisma";
 
 const MAX_MATCH_PLAYERS = 98;
 
+function buildStreamerCandidates(
+  rows: Awaited<ReturnType<typeof importExternalMatchStatsFromGameUrl>>,
+  overflowCount: number,
+) {
+  const candidates = rows
+    .map((row) => ({
+      steamId: row.steamId,
+      displayName: row.displayName || null,
+      team: row.team,
+      kills: row.kills ?? null,
+      deaths: row.deaths ?? null,
+      kpd: row.kpd ?? null,
+      kpm: row.kpm ?? null,
+      dpm: row.dpm ?? null,
+      timeSeconds: row.timeSeconds ?? null,
+    }))
+    .sort((left, right) => {
+      const leftKills = left.kills ?? Number.MAX_SAFE_INTEGER;
+      const rightKills = right.kills ?? Number.MAX_SAFE_INTEGER;
+      if (leftKills !== rightKills) return leftKills - rightKills;
+
+      const leftTime = left.timeSeconds ?? Number.MAX_SAFE_INTEGER;
+      const rightTime = right.timeSeconds ?? Number.MAX_SAFE_INTEGER;
+      if (leftTime !== rightTime) return leftTime - rightTime;
+
+      return (left.displayName || "").localeCompare(right.displayName || "");
+    });
+
+  const suggestedSteamIds = candidates
+    .filter((candidate) => (candidate.kills ?? 0) === 0)
+    .slice(0, overflowCount)
+    .map((candidate) => candidate.steamId);
+
+  return {
+    candidates,
+    suggestedSteamIds,
+  };
+}
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ matchId: string }> },
@@ -48,23 +87,16 @@ export async function POST(
   const overflowCount = Math.max(rows.length - MAX_MATCH_PLAYERS, 0);
 
   if (overflowCount > 0 && excludedSteamIds.size !== overflowCount) {
+    const { candidates, suggestedSteamIds } = buildStreamerCandidates(rows, overflowCount);
+
     return NextResponse.json(
       {
         error: `This match has ${rows.length} players. Please choose ${overflowCount} streamer${overflowCount === 1 ? "" : "s"} to exclude before importing.`,
         needsStreamerSelection: true,
         overflowCount,
         totalPlayersFound: rows.length,
-        candidates: rows.map((row) => ({
-          steamId: row.steamId,
-          displayName: row.displayName || null,
-          team: row.team,
-          kills: row.kills ?? null,
-          deaths: row.deaths ?? null,
-          kpd: row.kpd ?? null,
-          kpm: row.kpm ?? null,
-          dpm: row.dpm ?? null,
-          timeSeconds: row.timeSeconds ?? null,
-        })),
+        suggestedSteamIds,
+        candidates,
       },
       { status: 409 },
     );
@@ -73,23 +105,17 @@ export async function POST(
   const filteredRows = rows.filter((row) => !excludedSteamIds.has(row.steamId));
 
   if (filteredRows.length > MAX_MATCH_PLAYERS) {
+    const remainingOverflowCount = filteredRows.length - MAX_MATCH_PLAYERS;
+    const { candidates, suggestedSteamIds } = buildStreamerCandidates(filteredRows, remainingOverflowCount);
+
     return NextResponse.json(
       {
         error: `Import still contains ${filteredRows.length} players after exclusions. Please exclude ${filteredRows.length - MAX_MATCH_PLAYERS} more streamer${filteredRows.length - MAX_MATCH_PLAYERS === 1 ? "" : "s"}.`,
         needsStreamerSelection: true,
-        overflowCount: filteredRows.length - MAX_MATCH_PLAYERS,
+        overflowCount: remainingOverflowCount,
         totalPlayersFound: rows.length,
-        candidates: filteredRows.map((row) => ({
-          steamId: row.steamId,
-          displayName: row.displayName || null,
-          team: row.team,
-          kills: row.kills ?? null,
-          deaths: row.deaths ?? null,
-          kpd: row.kpd ?? null,
-          kpm: row.kpm ?? null,
-          dpm: row.dpm ?? null,
-          timeSeconds: row.timeSeconds ?? null,
-        })),
+        suggestedSteamIds,
+        candidates,
       },
       { status: 409 },
     );
