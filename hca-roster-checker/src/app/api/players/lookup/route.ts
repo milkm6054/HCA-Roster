@@ -28,9 +28,6 @@ export async function GET(request: Request) {
     where: { steamId64: normalized.steamId64 },
     include: {
       matchPlayers: {
-        where: {
-          matchId: { not: null },
-        },
         include: {
           match: {
             include: {
