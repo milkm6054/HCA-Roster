@@ -8,6 +8,20 @@ type Team = {
   name: string;
   tag?: string | null;
   logoDataUrl?: string | null;
+  recentMatches?: Array<{
+    id: string;
+    week: number;
+    mapName?: string | null;
+    midpointName?: string | null;
+    gameUrl?: string | null;
+    playedAt?: string | null;
+    opponent: string;
+    sideLabel: string;
+    _count: {
+      matchPlayers: number;
+      violations: number;
+    };
+  }>;
 };
 
 type RosterEntry = {
@@ -39,6 +53,12 @@ type Violation = {
   createdAt: string;
   player?: {
     displayName?: string | null;
+  } | null;
+  match?: {
+    week: number;
+    mapName?: string | null;
+    teamA: { name: string };
+    teamB: { name: string };
   } | null;
 };
 
@@ -430,6 +450,7 @@ export default function TeamDetailPage() {
                   <th className="px-4 py-3">Conflicting teams</th>
                   <th className="px-4 py-3">Severity</th>
                   <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Match</th>
                   <th className="px-4 py-3">Steam ID</th>
                   <th className="px-4 py-3">Created</th>
                 </tr>
@@ -447,6 +468,11 @@ export default function TeamDetailPage() {
                       </td>
                       <td className="px-4 py-3">{issue.severity}</td>
                       <td className="px-4 py-3">{issue.status}</td>
+                      <td className="px-4 py-3">
+                        {issue.match
+                          ? `Week ${issue.match.week}: ${issue.match.teamA.name} vs ${issue.match.teamB.name}${issue.match.mapName ? ` (${issue.match.mapName})` : ""}`
+                          : "-"}
+                      </td>
                       <td className="px-4 py-3 font-mono text-xs">{issue.rawSteamId || "-"}</td>
                       <td className="px-4 py-3">{new Date(issue.createdAt).toLocaleString()}</td>
                     </tr>
@@ -656,6 +682,51 @@ export default function TeamDetailPage() {
                 <tr>
                   <td colSpan={3} className="px-4 py-6 text-center text-slate-500">
                     No gamespass members detected for this season yet.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
+        <h2 className="text-lg font-semibold">Previous games</h2>
+        <div className="overflow-hidden rounded-lg border border-slate-200">
+          <table className="w-full border-collapse text-left text-sm">
+            <thead className="bg-slate-50">
+              <tr>
+                <th className="px-4 py-3">Week</th>
+                <th className="px-4 py-3">Side</th>
+                <th className="px-4 py-3">Opponent</th>
+                <th className="px-4 py-3">Map</th>
+                <th className="px-4 py-3">Midpoint</th>
+                <th className="px-4 py-3">Players logged</th>
+                <th className="px-4 py-3">Violations</th>
+                <th className="px-4 py-3">Open</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(team?.recentMatches || []).map((match) => (
+                <tr key={match.id} className="border-t border-slate-100">
+                  <td className="px-4 py-3">{match.week}</td>
+                  <td className="px-4 py-3">{match.sideLabel}</td>
+                  <td className="px-4 py-3">{match.opponent}</td>
+                  <td className="px-4 py-3">{match.mapName || "-"}</td>
+                  <td className="px-4 py-3">{match.midpointName || "-"}</td>
+                  <td className="px-4 py-3">{match._count.matchPlayers}</td>
+                  <td className="px-4 py-3">{match._count.violations}</td>
+                  <td className="px-4 py-3">
+                    <a href={`/matches/${match.id}`} className="text-slate-700 underline underline-offset-4">
+                      View
+                    </a>
+                  </td>
+                </tr>
+              ))}
+              {(team?.recentMatches || []).length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-6 text-center text-slate-500">
+                    No previous games linked to this team yet.
                   </td>
                 </tr>
               ) : null}

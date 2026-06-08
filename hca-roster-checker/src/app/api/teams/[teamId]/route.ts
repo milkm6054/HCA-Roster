@@ -49,6 +49,32 @@ export async function GET(
         include: { player: true },
         orderBy: { submittedAt: "desc" },
       },
+      matchesAsTeamA: {
+        include: {
+          teamB: true,
+          _count: {
+            select: {
+              matchPlayers: true,
+              violations: true,
+            },
+          },
+        },
+        orderBy: [{ week: "desc" }, { createdAt: "desc" }],
+        take: 10,
+      },
+      matchesAsTeamB: {
+        include: {
+          teamA: true,
+          _count: {
+            select: {
+              matchPlayers: true,
+              violations: true,
+            },
+          },
+        },
+        orderBy: [{ week: "desc" }, { createdAt: "desc" }],
+        take: 10,
+      },
     },
   });
 
@@ -56,7 +82,36 @@ export async function GET(
     return NextResponse.json({ error: "Team not found." }, { status: 404 });
   }
 
-  return NextResponse.json({ team });
+  const recentMatches = [...team.matchesAsTeamA, ...team.matchesAsTeamB]
+    .sort((left, right) => {
+      if (left.week !== right.week) {
+        return right.week - left.week;
+      }
+
+      return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
+    })
+    .slice(0, 12)
+    .map((match) => ({
+      id: match.id,
+      week: match.week,
+      mapName: match.mapName,
+      midpointName: match.midpointName,
+      gameUrl: match.gameUrl,
+      playedAt: match.playedAt,
+      opponent:
+        match.teamAId === teamId
+          ? match.teamB.name
+          : match.teamA.name,
+      sideLabel: match.teamAId === teamId ? "Axis" : "Allies",
+      _count: match._count,
+    }));
+
+  return NextResponse.json({
+    team: {
+      ...team,
+      recentMatches,
+    },
+  });
 }
 
 export async function PATCH(

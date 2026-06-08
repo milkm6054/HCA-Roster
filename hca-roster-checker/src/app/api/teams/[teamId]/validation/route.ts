@@ -21,12 +21,19 @@ export async function GET(
   const violations = await prisma.violation.findMany({
     where: {
       teamId,
-      type: {
-        in: ["DUPLICATE_ROSTER", "INVALID_STEAM_ID"],
+      status: "OPEN",
+      NOT: {
+        type: "NEW_ACCOUNT",
       },
     },
     include: {
       player: true,
+      match: {
+        include: {
+          teamA: true,
+          teamB: true,
+        },
+      },
     },
     orderBy: { createdAt: "desc" },
   });

@@ -70,9 +70,14 @@ export async function DELETE(
     return NextResponse.json({ error: "Match not found." }, { status: 404 });
   }
 
-  await prisma.match.delete({
-    where: { id: matchId },
-  });
+  await prisma.$transaction([
+    prisma.violation.deleteMany({
+      where: { matchId },
+    }),
+    prisma.match.delete({
+      where: { id: matchId },
+    }),
+  ]);
 
   await createAuditLog({
     action: "MATCH_DELETED",
