@@ -82,7 +82,32 @@ export async function GET(
     return NextResponse.json({ error: "Team not found." }, { status: 404 });
   }
 
-  const recentMatches = [...team.matchesAsTeamA, ...team.matchesAsTeamB]
+  const recentMatches = [
+    ...team.matchesAsTeamA.map((match) => ({
+      id: match.id,
+      week: match.week,
+      mapName: match.mapName,
+      midpointName: match.midpointName,
+      gameUrl: match.gameUrl,
+      playedAt: match.playedAt,
+      createdAt: match.createdAt,
+      opponent: match.teamB.name,
+      sideLabel: "Axis" as const,
+      _count: match._count,
+    })),
+    ...team.matchesAsTeamB.map((match) => ({
+      id: match.id,
+      week: match.week,
+      mapName: match.mapName,
+      midpointName: match.midpointName,
+      gameUrl: match.gameUrl,
+      playedAt: match.playedAt,
+      createdAt: match.createdAt,
+      opponent: match.teamA.name,
+      sideLabel: "Allies" as const,
+      _count: match._count,
+    })),
+  ]
     .sort((left, right) => {
       if (left.week !== right.week) {
         return right.week - left.week;
@@ -98,11 +123,8 @@ export async function GET(
       midpointName: match.midpointName,
       gameUrl: match.gameUrl,
       playedAt: match.playedAt,
-      opponent:
-        match.teamAId === teamId
-          ? match.teamB.name
-          : match.teamA.name,
-      sideLabel: match.teamAId === teamId ? "Axis" : "Allies",
+      opponent: match.opponent,
+      sideLabel: match.sideLabel,
       _count: match._count,
     }));
 
