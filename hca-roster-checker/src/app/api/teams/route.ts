@@ -4,12 +4,20 @@ import { createAuditLog } from "@/lib/audit/auditLog";
 import { isOrga, requireApiSession } from "@/lib/auth/guards";
 import { getActor } from "@/lib/auth/getActor";
 import { isLikelyGamespassId } from "@/lib/steam/steamIds";
+import { ViolationType } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   const auth = await requireApiSession(request);
   if (!auth.ok) return auth.response;
+
+  await prisma.violation.deleteMany({
+    where: {
+      type: ViolationType.UNREGISTERED_PLAYER,
+      matchId: null,
+    },
+  });
 
   const teams = await prisma.team.findMany({
     where: isOrga(auth.session)

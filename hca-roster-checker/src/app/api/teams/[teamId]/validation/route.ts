@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { canAccessTeam, requireApiSession } from "@/lib/auth/guards";
 import { prisma } from "@/lib/prisma";
 import { isLikelyGamespassId } from "@/lib/steam/steamIds";
+import { ViolationType } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,13 @@ export async function GET(
   if (!canAccessTeam(auth.session, teamId)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+
+  await prisma.violation.deleteMany({
+    where: {
+      type: ViolationType.UNREGISTERED_PLAYER,
+      matchId: null,
+    },
+  });
 
   const violations = await prisma.violation.findMany({
     where: {

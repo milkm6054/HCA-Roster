@@ -10,6 +10,13 @@ export async function GET(request: Request) {
   const auth = await requireApiSession(request);
   if (!auth.ok) return auth.response;
 
+  await prisma.violation.deleteMany({
+    where: {
+      type: ViolationType.UNREGISTERED_PLAYER,
+      matchId: null,
+    },
+  });
+
   const { searchParams } = new URL(request.url);
   const type = searchParams.get("type");
   const status = searchParams.get("status");
