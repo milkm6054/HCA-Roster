@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { RosterEntryStatus, ViolationStatus, ViolationType } from "@prisma/client";
+import { Prisma, RosterEntryStatus, ViolationSeverity, ViolationStatus, ViolationType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { createAuditLog } from "@/lib/audit/auditLog";
 import { isOrga, requireApiSession } from "@/lib/auth/guards";
@@ -62,6 +62,7 @@ export async function PATCH(
   let keptTeamName: string | null = null;
   let removedTeamNames: string[] = [];
   let resolution = "Resolved violation";
+  let duplicateViolationsCreated = 0;
 
   if (existingViolation.type === ViolationType.DUPLICATE_ROSTER) {
     const selectedTeamId = body.selectedTeamId?.trim();
@@ -169,12 +170,6 @@ export async function PATCH(
 
           const activeEntries = existingPlayer?.rosterEntries || [];
           const existingEntryOnThisTeam = activeEntries.find((entry) => entry.teamId === teamId);
-          const conflictingEntries = activeEntries.filter((entry) => entry.teamId !== teamId);
-
-          if (conflictingEntries.length > 0) {
-            const conflictingTeamNames = conflictingEntries.map((entry) => entry.team.name).join(", ");
-            throw new Error(`This Steam ID is already part of ${conflictingTeamNames}.`);
-          }
 
           const player = await tx.player.upsert({
             where: { steamId64: normalized.steamId64 },
@@ -220,6 +215,54 @@ export async function PATCH(
             });
           }
 
+          const refreshedEntries = await tx.rosterEntry.findMany({
+            where: {
+              season,
+              status: RosterEntryStatus.ACTIVE,
+              playerId: player.id,
+            },
+            include: {
+              team: true,
+              player: true,
+            },
+          });
+
+          const uniqueTeamIds = [...new Set(refreshedEntries.map((entry) => entry.teamId))];
+          if (uniqueTeamIds.length > 1) {
+            await tx.violation.deleteMany({
+              where: {
+                type: ViolationType.DUPLICATE_ROSTER,
+                status: ViolationStatus.OPEN,
+                playerId: player.id,
+                matchId: null,
+              },
+            });
+
+            for (const entry of refreshedEntries) {
+              await tx.violation.create({
+                data: {
+                  type: ViolationType.DUPLICATE_ROSTER,
+                  severity: ViolationSeverity.CRITICAL,
+                  status: ViolationStatus.OPEN,
+                  teamId: entry.teamId,
+                  playerId: player.id,
+                  rawSteamId: player.steamId64,
+                  details: {
+                    season,
+                    displayName: player.displayName,
+                    teamName: entry.team.name,
+                    conflictingTeamNames: refreshedEntries
+                      .filter((relatedEntry) => relatedEntry.teamId !== entry.teamId)
+                      .map((relatedEntry) => relatedEntry.team.name),
+                    conflictingTeamIds: uniqueTeamIds.filter((id) => id !== entry.teamId),
+                    source: "INVALID_STEAM_ID_RESOLUTION",
+                  } as Prisma.JsonObject,
+                },
+              });
+              duplicateViolationsCreated += 1;
+            }
+          }
+
           await tx.violation.update({
             where: { id: violationId },
             data: {
@@ -235,7 +278,10 @@ export async function PATCH(
         throw error;
       }
 
-      resolution = `Replaced invalid Steam ID with ${normalized.steamId64}`;
+      resolution =
+        duplicateViolationsCreated > 0
+          ? `Replaced invalid Steam ID with ${normalized.steamId64} and created duplicate roster violations`
+          : `Replaced invalid Steam ID with ${normalized.steamId64}`;
     } else {
       return NextResponse.json(
         { error: "Choose whether this is a corrected Steam ID or a Game Pass ID." },
@@ -268,5 +314,6 @@ export async function PATCH(
       ...existingViolation,
       status: ViolationStatus.CONFIRMED,
     },
+    duplicateViolationsCreated,
   });
 }

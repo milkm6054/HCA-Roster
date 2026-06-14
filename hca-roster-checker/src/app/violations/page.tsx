@@ -44,6 +44,7 @@ export default function ViolationsPage() {
   const [invalidResolutionModes, setInvalidResolutionModes] = useState<Record<string, "STEAM_ID" | "GAMESPASS" | "">>({});
   const [correctedSteamIds, setCorrectedSteamIds] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const query = useMemo(() => {
     const params = new URLSearchParams();
@@ -82,6 +83,7 @@ export default function ViolationsPage() {
 
   async function resolveViolation(violation: Violation) {
     setError(null);
+    setNotice(null);
 
     const selectedTeamId = selectedTeams[violation.id];
     if (violation.type === "DUPLICATE_ROSTER" && !selectedTeamId) {
@@ -121,6 +123,11 @@ export default function ViolationsPage() {
       return;
     }
 
+    const data = await res.json().catch(() => ({}));
+    if ((data.duplicateViolationsCreated ?? 0) > 0) {
+      setNotice(`Resolved invalid Steam ID and created ${data.duplicateViolationsCreated} duplicate roster violation${data.duplicateViolationsCreated === 1 ? "" : "s"}.`);
+    }
+
     await refreshViolations();
   }
 
@@ -152,6 +159,10 @@ export default function ViolationsPage() {
 
       {error ? (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+      ) : null}
+
+      {notice ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">{notice}</div>
       ) : null}
 
       <div className="space-y-4">
