@@ -89,6 +89,15 @@ export default async function DashboardPage() {
         name: true,
         tag: true,
         logoDataUrl: true,
+        _count: {
+          select: {
+            rosterEntries: {
+              where: {
+                status: "ACTIVE",
+              },
+            },
+          },
+        },
       },
     }),
   ]);
@@ -96,6 +105,9 @@ export default async function DashboardPage() {
   const filteredTeamViolations = teamViolations.filter(
     (violation) => !isLikelyGamespassId(violation.rawSteamId || ""),
   ).length;
+
+  const teamsWithRoster = teamsForGraphic.filter((team) => team._count.rosterEntries > 0);
+  const teamsNeedingRoster = teamsForGraphic.filter((team) => team._count.rosterEntries === 0);
 
   const cards =
     session.role === "TEAM_REP"
@@ -193,6 +205,60 @@ export default async function DashboardPage() {
           ))}
         </div>
       </section>
+
+      {session.role === "HCA_ORGA" ? (
+        <section className="grid gap-4 xl:grid-cols-2">
+          <div className="surface-card space-y-4 p-5">
+            <div className="flex items-end justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-500">Roster Submitted</p>
+                <h2 className="mt-2 text-lg font-semibold tracking-tight">{teamsWithRoster.length} team{teamsWithRoster.length === 1 ? "" : "s"}</h2>
+              </div>
+              <p className="text-sm muted-copy">Active roster uploaded</p>
+            </div>
+            <ul className="space-y-2 text-sm">
+              {teamsWithRoster.map((team) => (
+                <li key={team.id} className="surface-card-soft flex items-center justify-between gap-3 px-3 py-2">
+                  <span className="font-medium">{team.name}</span>
+                  <span className="text-xs muted-copy">{team._count.rosterEntries} player{team._count.rosterEntries === 1 ? "" : "s"}</span>
+                </li>
+              ))}
+              {teamsWithRoster.length === 0 ? (
+                <li className="surface-card-soft px-3 py-2 muted-copy">No teams have submitted a roster yet.</li>
+              ) : null}
+            </ul>
+          </div>
+
+          <div className="surface-card space-y-4 p-5">
+            <div className="flex items-end justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-amber-500">Roster Needed</p>
+                <h2 className="mt-2 text-lg font-semibold tracking-tight">{teamsNeedingRoster.length} team{teamsNeedingRoster.length === 1 ? "" : "s"}</h2>
+              </div>
+              <p className="text-sm muted-copy">No active roster yet</p>
+            </div>
+            <ul className="space-y-2 text-sm">
+              {teamsNeedingRoster.map((team) => (
+                <li key={team.id} className="surface-card-soft px-3 py-2">
+                  <span className="font-medium">{team.name}</span>
+                </li>
+              ))}
+              {teamsNeedingRoster.length === 0 ? (
+                <li className="surface-card-soft px-3 py-2 muted-copy">Every team currently has a roster submitted.</li>
+              ) : null}
+            </ul>
+          </div>
+        </section>
+      ) : (
+        <section className="surface-card space-y-3 p-5">
+          <h2 className="text-lg font-semibold tracking-tight">Roster Status</h2>
+          <p className="text-sm muted-copy">
+            {yourPlayerTotal > 0
+              ? `${currentTeam?.name || "Your team"} has an active roster submitted.`
+              : `${currentTeam?.name || "Your team"} still needs a roster submitted.`}
+          </p>
+        </section>
+      )}
 
       <section className="gallery-quote" aria-label="Quote">
         <blockquote>
