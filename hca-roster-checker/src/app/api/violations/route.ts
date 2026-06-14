@@ -22,33 +22,91 @@ export async function GET(request: Request) {
   const status = searchParams.get("status");
 
   const violationType =
-    type && Object.values(ViolationType).includes(type as ViolationType)
+    type &&
+    [ViolationType.DUPLICATE_ROSTER, ViolationType.INVALID_STEAM_ID].includes(type as ViolationType)
       ? (type as ViolationType)
       : undefined;
 
   const violationStatus =
     status && Object.values(ViolationStatus).includes(status as ViolationStatus)
       ? (status as ViolationStatus)
-      : undefined;
+      : ViolationStatus.OPEN;
 
-  const violations = await prisma.violation.findMany({
-    where: {
-      NOT: {
-        type: ViolationType.NEW_ACCOUNT,
+  const [violations, resolvedLogs] = await Promise.all([
+    prisma.violation.findMany({
+      where: {
+        type: violationType ?? {
+          in: [ViolationType.DUPLICATE_ROSTER, ViolationType.INVALID_STEAM_ID],
+        },
+        status: violationStatus,
+        teamId: isOrga(auth.session) ? undefined : (auth.session.teamId ?? "__no_team__"),
       },
-      type: violationType,
-      status: violationStatus,
-      teamId: isOrga(auth.session) ? undefined : (auth.session.teamId ?? "__no_team__"),
-    },
-    include: {
-      team: true,
-      player: true,
-      match: true,
-    },
-    orderBy: { createdAt: "desc" },
+      include: {
+        team: true,
+        player: {
+          include: {
+            rosterEntries: {
+              where: {
+                status: "ACTIVE",
+              },
+              include: {
+                team: true,
+              },
+              orderBy: {
+                submittedAt: "desc",
+              },
+            },
+          },
+        },
+        match: true,
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.auditLog.findMany({
+      where: {
+        action: "VIOLATION_RESOLVED",
+        ...(isOrga(auth.session)
+          ? {}
+          : {
+              details: {
+                path: ["teamId"],
+                equals: auth.session.teamId ?? "__no_team__",
+              },
+            }),
+      },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+      select: {
+        id: true,
+        actor: true,
+        details: true,
+        createdAt: true,
+      },
+    }),
+  ]);
+
+  const resolvedViolations = resolvedLogs.map((log) => {
+    const details =
+      log.details && typeof log.details === "object" && !Array.isArray(log.details)
+        ? (log.details as Record<string, unknown>)
+        : {};
+
+    return {
+      id: log.id,
+      actor: log.actor,
+      createdAt: log.createdAt,
+      violationType: typeof details.violationType === "string" ? details.violationType : null,
+      playerName: typeof details.playerName === "string" ? details.playerName : null,
+      rawSteamId: typeof details.rawSteamId === "string" ? details.rawSteamId : null,
+      teamName: typeof details.teamName === "string" ? details.teamName : null,
+      resolution: typeof details.resolution === "string" ? details.resolution : null,
+      keptTeamName: typeof details.keptTeamName === "string" ? details.keptTeamName : null,
+      removedTeamNames: Array.isArray(details.removedTeamNames) ? details.removedTeamNames : [],
+    };
   });
 
   return NextResponse.json({
     violations: violations.filter((violation) => !isLikelyGamespassId(violation.rawSteamId || "")),
+    resolvedViolations,
   });
 }

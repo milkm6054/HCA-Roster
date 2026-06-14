@@ -4,40 +4,56 @@ import { useEffect, useMemo, useState } from "react";
 
 type Violation = {
   id: string;
-  type: string;
+  type: "DUPLICATE_ROSTER" | "INVALID_STEAM_ID";
   severity: string;
   status: "OPEN" | "DISMISSED" | "CONFIRMED";
   rawSteamId?: string | null;
   details: unknown;
   team?: { name: string } | null;
-  player?: { displayName?: string | null } | null;
+  player?: {
+    displayName?: string | null;
+    rosterEntries?: {
+      id: string;
+      teamId: string;
+      team: { name: string };
+    }[];
+  } | null;
 };
 
-const statusOptions = ["", "OPEN", "DISMISSED", "CONFIRMED"] as const;
-const typeOptions = [
-  "",
-  "DUPLICATE_ROSTER",
-  "INVALID_STEAM_ID",
-  "UNREGISTERED_PLAYER",
-] as const;
+type ResolvedViolation = {
+  id: string;
+  actor?: string | null;
+  createdAt: string;
+  violationType?: string | null;
+  playerName?: string | null;
+  rawSteamId?: string | null;
+  teamName?: string | null;
+  resolution?: string | null;
+  keptTeamName?: string | null;
+  removedTeamNames?: unknown[];
+};
+
+const typeOptions = ["", "DUPLICATE_ROSTER", "INVALID_STEAM_ID"] as const;
 
 export default function ViolationsPage() {
   const [role, setRole] = useState<"HCA_ORGA" | "TEAM_REP" | null>(null);
   const [type, setType] = useState<(typeof typeOptions)[number]>("");
-  const [status, setStatus] = useState<(typeof statusOptions)[number]>("");
   const [violations, setViolations] = useState<Violation[]>([]);
+  const [resolvedViolations, setResolvedViolations] = useState<ResolvedViolation[]>([]);
+  const [selectedTeams, setSelectedTeams] = useState<Record<string, string>>({});
+  const [error, setError] = useState<string | null>(null);
 
   const query = useMemo(() => {
     const params = new URLSearchParams();
     if (type) params.set("type", type);
-    if (status) params.set("status", status);
     return params.toString();
-  }, [type, status]);
+  }, [type]);
 
   async function refreshViolations() {
     const res = await fetch(`/api/violations${query ? `?${query}` : ""}`);
     const data = await res.json();
     setViolations(data.violations || []);
+    setResolvedViolations(data.resolvedViolations || []);
   }
 
   useEffect(() => {
@@ -53,6 +69,7 @@ export default function ViolationsPage() {
       if (active) {
         setRole(meData.session?.role || null);
         setViolations(data.violations || []);
+        setResolvedViolations(data.resolvedViolations || []);
       }
     })();
 
@@ -61,12 +78,28 @@ export default function ViolationsPage() {
     };
   }, [query]);
 
-  async function setViolationStatus(violationId: string, nextStatus: "DISMISSED" | "CONFIRMED") {
-    await fetch(`/api/violations/${violationId}`, {
+  async function resolveViolation(violation: Violation) {
+    setError(null);
+
+    const selectedTeamId = selectedTeams[violation.id];
+    if (violation.type === "DUPLICATE_ROSTER" && !selectedTeamId) {
+      setError("Select the team this player is staying on before resolving the duplicate roster violation.");
+      return;
+    }
+
+    const res = await fetch(`/api/violations/${violation.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: nextStatus }),
+      body: JSON.stringify(
+        violation.type === "DUPLICATE_ROSTER" ? { selectedTeamId } : { status: "CONFIRMED" },
+      ),
     });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error || "Failed to resolve violation.");
+      return;
+    }
 
     await refreshViolations();
   }
@@ -87,7 +120,7 @@ export default function ViolationsPage() {
       <h1 className="text-2xl font-semibold tracking-tight">Violations</h1>
 
       <div className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 md:grid-cols-4">
-        <select value={type} onChange={(e) => setType(e.target.value as (typeof typeOptions)[number])}>
+        <select value={type} onChange={(event) => setType(event.target.value as (typeof typeOptions)[number])}>
           <option value="">All types</option>
           {typeOptions.filter(Boolean).map((item) => (
             <option key={item} value={item}>
@@ -95,19 +128,11 @@ export default function ViolationsPage() {
             </option>
           ))}
         </select>
-
-        <select
-          value={status}
-          onChange={(e) => setStatus(e.target.value as (typeof statusOptions)[number])}
-        >
-          <option value="">All statuses</option>
-          {statusOptions.filter(Boolean).map((item) => (
-            <option key={item} value={item}>
-              {item}
-            </option>
-          ))}
-        </select>
       </div>
+
+      {error ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+      ) : null}
 
       <div className="space-y-4">
         {groupedEntries.map(([teamName, teamViolations]) => (
@@ -126,7 +151,6 @@ export default function ViolationsPage() {
                   <th className="px-4 py-3">Severity</th>
                   <th className="px-4 py-3">Steam ID</th>
                   <th className="px-4 py-3">Details</th>
-                  <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">Actions</th>
                 </tr>
               </thead>
@@ -140,25 +164,32 @@ export default function ViolationsPage() {
                     <td className="max-w-xs px-4 py-3 text-xs">
                       <pre className="overflow-auto whitespace-pre-wrap">{JSON.stringify(violation.details, null, 2)}</pre>
                     </td>
-                    <td className="px-4 py-3">{violation.status}</td>
-                    <td className="space-x-2 px-4 py-3">
+                    <td className="space-y-2 px-4 py-3">
                       {role === "HCA_ORGA" ? (
-                        <>
-                          <button
-                            className="bg-slate-700 px-2 py-1 text-xs text-white"
-                            onClick={() => setViolationStatus(violation.id, "DISMISSED")}
-                            disabled={violation.status === "DISMISSED"}
-                          >
-                            Dismiss
+                        <div className="flex flex-col gap-2">
+                          {violation.type === "DUPLICATE_ROSTER" ? (
+                            <select
+                              className="max-w-48 rounded border border-slate-300 px-2 py-1 text-xs"
+                              value={selectedTeams[violation.id] || ""}
+                              onChange={(event) =>
+                                setSelectedTeams((current) => ({
+                                  ...current,
+                                  [violation.id]: event.target.value,
+                                }))
+                              }
+                            >
+                              <option value="">Select team</option>
+                              {(violation.player?.rosterEntries || []).map((entry) => (
+                                <option key={entry.id} value={entry.teamId}>
+                                  {entry.team.name}
+                                </option>
+                              ))}
+                            </select>
+                          ) : null}
+                          <button className="bg-slate-900 px-2 py-1 text-xs text-white" onClick={() => resolveViolation(violation)}>
+                            Resolved
                           </button>
-                          <button
-                            className="bg-slate-900 px-2 py-1 text-xs text-white"
-                            onClick={() => setViolationStatus(violation.id, "CONFIRMED")}
-                            disabled={violation.status === "CONFIRMED"}
-                          >
-                            Confirm
-                          </button>
-                        </>
+                        </div>
                       ) : (
                         <span className="text-xs text-slate-500">Read only</span>
                       )}
@@ -172,10 +203,57 @@ export default function ViolationsPage() {
 
         {groupedEntries.length === 0 ? (
           <div className="rounded-lg border border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-500">
-            No violations match the current filters.
+            No active violations match the current filters.
           </div>
         ) : null}
       </div>
+
+      <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+        <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+          <h2 className="text-lg font-semibold tracking-tight">Resolved violation log</h2>
+          <p className="text-sm text-slate-500">Recent violations marked resolved by HCA ORGA.</p>
+        </div>
+        <table className="w-full border-collapse text-left text-sm">
+          <thead className="bg-slate-50">
+            <tr>
+              <th className="px-4 py-3">Date</th>
+              <th className="px-4 py-3">Type</th>
+              <th className="px-4 py-3">Player</th>
+              <th className="px-4 py-3">Resolution</th>
+              <th className="px-4 py-3">By</th>
+            </tr>
+          </thead>
+          <tbody>
+            {resolvedViolations.map((log) => (
+              <tr key={log.id} className="border-t border-slate-100 align-top">
+                <td className="px-4 py-3">{new Date(log.createdAt).toLocaleString()}</td>
+                <td className="px-4 py-3">{log.violationType || "-"}</td>
+                <td className="px-4 py-3">
+                  {log.playerName || log.rawSteamId || "-"}
+                  {log.teamName ? <span className="block text-xs text-slate-500">{log.teamName}</span> : null}
+                </td>
+                <td className="px-4 py-3">
+                  {log.resolution || "-"}
+                  {log.keptTeamName ? (
+                    <span className="block text-xs text-slate-500">
+                      Kept {log.keptTeamName}
+                      {log.removedTeamNames?.length ? `; removed ${log.removedTeamNames.join(", ")}` : ""}
+                    </span>
+                  ) : null}
+                </td>
+                <td className="px-4 py-3">{log.actor || "-"}</td>
+              </tr>
+            ))}
+            {resolvedViolations.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-4 py-6 text-center text-sm text-slate-500">
+                  No resolved violations have been logged yet.
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </section>
     </section>
   );
 }
