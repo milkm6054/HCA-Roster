@@ -43,7 +43,10 @@ export async function PATCH(
     return NextResponse.json({ error: "Violation not found." }, { status: 404 });
   }
 
-  if (![ViolationType.DUPLICATE_ROSTER, ViolationType.INVALID_STEAM_ID].includes(existingViolation.type)) {
+  if (
+    existingViolation.type !== ViolationType.DUPLICATE_ROSTER &&
+    existingViolation.type !== ViolationType.INVALID_STEAM_ID
+  ) {
     return NextResponse.json({ error: "This violation type cannot be resolved here." }, { status: 400 });
   }
 

@@ -60,9 +60,22 @@ export async function DELETE(
 
   const match = await prisma.match.findUnique({
     where: { id: matchId },
-    include: {
-      teamA: true,
-      teamB: true,
+    select: {
+      id: true,
+      week: true,
+      mapName: true,
+      midpointName: true,
+      gameUrl: true,
+      teamA: {
+        select: {
+          name: true,
+        },
+      },
+      teamB: {
+        select: {
+          name: true,
+        },
+      },
     },
   });
 

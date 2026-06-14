@@ -6,6 +6,10 @@ import { isLikelyGamespassId } from "@/lib/steam/steamIds";
 
 export const dynamic = "force-dynamic";
 
+function isSupportedViolationType(value: string): value is "DUPLICATE_ROSTER" | "INVALID_STEAM_ID" {
+  return value === ViolationType.DUPLICATE_ROSTER || value === ViolationType.INVALID_STEAM_ID;
+}
+
 export async function GET(request: Request) {
   const auth = await requireApiSession(request);
   if (!auth.ok) return auth.response;
@@ -21,11 +25,7 @@ export async function GET(request: Request) {
   const type = searchParams.get("type");
   const status = searchParams.get("status");
 
-  const violationType =
-    type &&
-    [ViolationType.DUPLICATE_ROSTER, ViolationType.INVALID_STEAM_ID].includes(type as ViolationType)
-      ? (type as ViolationType)
-      : undefined;
+  const violationType = type && isSupportedViolationType(type) ? type : undefined;
 
   const violationStatus =
     status && Object.values(ViolationStatus).includes(status as ViolationStatus)
