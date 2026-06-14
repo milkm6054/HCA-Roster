@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { createAuditLog } from "@/lib/audit/auditLog";
 import { isOrga, requireApiSession } from "@/lib/auth/guards";
 import { getActor } from "@/lib/auth/getActor";
+import { estimateSteamAccountCreatedAt } from "@/lib/steam/accountAge";
+import { normalizeSteamId } from "@/lib/steam/steamIds";
 
 export async function PATCH(
   request: Request,
@@ -18,6 +20,8 @@ export async function PATCH(
   const { violationId } = await params;
   const body = (await request.json()) as {
     selectedTeamId?: string;
+    resolutionType?: "STEAM_ID" | "GAMESPASS";
+    correctedSteamId?: string;
   };
 
   const existingViolation = await prisma.violation.findUnique({
@@ -57,6 +61,7 @@ export async function PATCH(
   const actor = await getActor(request);
   let keptTeamName: string | null = null;
   let removedTeamNames: string[] = [];
+  let resolution = "Resolved violation";
 
   if (existingViolation.type === ViolationType.DUPLICATE_ROSTER) {
     const selectedTeamId = body.selectedTeamId?.trim();
@@ -103,11 +108,140 @@ export async function PATCH(
         data: { status: ViolationStatus.CONFIRMED },
       });
     });
+    resolution = "Selected active roster team and removed other roster entries";
   } else {
-    await prisma.violation.update({
-      where: { id: violationId },
-      data: { status: ViolationStatus.CONFIRMED },
-    });
+    const resolutionType = body.resolutionType;
+    if (resolutionType === "GAMESPASS") {
+      await prisma.violation.update({
+        where: { id: violationId },
+        data: { status: ViolationStatus.CONFIRMED },
+      });
+      resolution = "Confirmed player is a Game Pass player";
+    } else if (resolutionType === "STEAM_ID") {
+      const correctedSteamIdInput = body.correctedSteamId?.trim() || "";
+      if (!correctedSteamIdInput) {
+        return NextResponse.json({ error: "A replacement Steam ID is required." }, { status: 400 });
+      }
+
+      const normalized = normalizeSteamId(correctedSteamIdInput);
+      if (!normalized.ok) {
+        return NextResponse.json({ error: normalized.reason }, { status: 400 });
+      }
+
+      if (!existingViolation.teamId) {
+        return NextResponse.json({ error: "Invalid Steam ID violation is missing its team." }, { status: 400 });
+      }
+      const teamId = existingViolation.teamId;
+
+      const details =
+        existingViolation.details && typeof existingViolation.details === "object" && !Array.isArray(existingViolation.details)
+          ? (existingViolation.details as Record<string, unknown>)
+          : {};
+      const season = typeof details.season === "string" ? details.season : "2026-S1";
+      const displayName =
+        typeof details.displayName === "string"
+          ? details.displayName
+          : existingViolation.player?.displayName || null;
+
+      const age = estimateSteamAccountCreatedAt(normalized.steamId64);
+
+      try {
+        await prisma.$transaction(async (tx) => {
+          const existingPlayer = await tx.player.findUnique({
+            where: { steamId64: normalized.steamId64 },
+            include: {
+              rosterEntries: {
+                where: {
+                  season,
+                  status: RosterEntryStatus.ACTIVE,
+                },
+                include: {
+                  team: {
+                    select: {
+                      id: true,
+                      name: true,
+                    },
+                  },
+                },
+              },
+            },
+          });
+
+          const activeEntries = existingPlayer?.rosterEntries || [];
+          const existingEntryOnThisTeam = activeEntries.find((entry) => entry.teamId === teamId);
+          const conflictingEntries = activeEntries.filter((entry) => entry.teamId !== teamId);
+
+          if (conflictingEntries.length > 0) {
+            const conflictingTeamNames = conflictingEntries.map((entry) => entry.team.name).join(", ");
+            throw new Error(`This Steam ID is already part of ${conflictingTeamNames}.`);
+          }
+
+          const player = await tx.player.upsert({
+            where: { steamId64: normalized.steamId64 },
+            create: {
+              steamId64: normalized.steamId64,
+              steamId3: normalized.steamId3,
+              displayName,
+              estimatedCreatedAt: age.estimatedCreatedAt,
+              accountAgeRisk: age.accountAgeRisk,
+            },
+            update: {
+              steamId3: normalized.steamId3,
+              displayName: displayName || undefined,
+              estimatedCreatedAt: age.estimatedCreatedAt,
+              accountAgeRisk: age.accountAgeRisk,
+            },
+          });
+
+          if (!existingEntryOnThisTeam) {
+            await tx.rosterEntry.upsert({
+              where: {
+                teamId_playerId_season: {
+                  teamId,
+                  playerId: player.id,
+                  season,
+                },
+              },
+              create: {
+                teamId,
+                playerId: player.id,
+                season,
+                status: RosterEntryStatus.ACTIVE,
+                submittedBy: actor,
+                submittedAt: new Date(),
+                lockedAt: null,
+              },
+              update: {
+                status: RosterEntryStatus.ACTIVE,
+                submittedBy: actor,
+                submittedAt: new Date(),
+                lockedAt: null,
+              },
+            });
+          }
+
+          await tx.violation.update({
+            where: { id: violationId },
+            data: {
+              status: ViolationStatus.CONFIRMED,
+              playerId: player.id,
+            },
+          });
+        });
+      } catch (error: unknown) {
+        if (error instanceof Error) {
+          return NextResponse.json({ error: error.message }, { status: 409 });
+        }
+        throw error;
+      }
+
+      resolution = `Replaced invalid Steam ID with ${normalized.steamId64}`;
+    } else {
+      return NextResponse.json(
+        { error: "Choose whether this is a corrected Steam ID or a Game Pass ID." },
+        { status: 400 },
+      );
+    }
   }
 
   await createAuditLog({
@@ -117,15 +251,13 @@ export async function PATCH(
     entityId: existingViolation.id,
     details: {
       violationType: existingViolation.type,
-      resolution:
-        existingViolation.type === ViolationType.INVALID_STEAM_ID
-          ? "Confirmed player is a Game Pass player"
-          : "Selected active roster team and removed other roster entries",
+      resolution,
       teamId: existingViolation.teamId,
       teamName: existingViolation.team?.name || null,
       playerId: existingViolation.playerId,
       playerName: existingViolation.player?.displayName || null,
       rawSteamId: existingViolation.rawSteamId,
+      correctedSteamId: body.correctedSteamId?.trim() || null,
       keptTeamName,
       removedTeamNames,
     },

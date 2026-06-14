@@ -41,6 +41,8 @@ export default function ViolationsPage() {
   const [violations, setViolations] = useState<Violation[]>([]);
   const [resolvedViolations, setResolvedViolations] = useState<ResolvedViolation[]>([]);
   const [selectedTeams, setSelectedTeams] = useState<Record<string, string>>({});
+  const [invalidResolutionModes, setInvalidResolutionModes] = useState<Record<string, "STEAM_ID" | "GAMESPASS" | "">>({});
+  const [correctedSteamIds, setCorrectedSteamIds] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
 
   const query = useMemo(() => {
@@ -87,11 +89,29 @@ export default function ViolationsPage() {
       return;
     }
 
+    if (violation.type === "INVALID_STEAM_ID") {
+      const resolutionType = invalidResolutionModes[violation.id];
+      if (!resolutionType) {
+        setError("Choose whether this invalid ID should be corrected to a Steam ID or marked as a Game Pass ID.");
+        return;
+      }
+
+      if (resolutionType === "STEAM_ID" && !(correctedSteamIds[violation.id] || "").trim()) {
+        setError("Enter a valid Steam ID before resolving this violation.");
+        return;
+      }
+    }
+
     const res = await fetch(`/api/violations/${violation.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(
-        violation.type === "DUPLICATE_ROSTER" ? { selectedTeamId } : { status: "CONFIRMED" },
+        violation.type === "DUPLICATE_ROSTER"
+          ? { selectedTeamId }
+          : {
+              resolutionType: invalidResolutionModes[violation.id],
+              correctedSteamId: correctedSteamIds[violation.id],
+            },
       ),
     });
 
@@ -185,9 +205,39 @@ export default function ViolationsPage() {
                                 </option>
                               ))}
                             </select>
-                          ) : null}
+                          ) : (
+                            <>
+                              <select
+                                className="max-w-48 rounded border border-slate-300 px-2 py-1 text-xs"
+                                value={invalidResolutionModes[violation.id] || ""}
+                                onChange={(event) =>
+                                  setInvalidResolutionModes((current) => ({
+                                    ...current,
+                                    [violation.id]: event.target.value as "STEAM_ID" | "GAMESPASS" | "",
+                                  }))
+                                }
+                              >
+                                <option value="">Select resolution</option>
+                                <option value="STEAM_ID">Enter valid Steam ID</option>
+                                <option value="GAMESPASS">Game Pass ID</option>
+                              </select>
+                              {invalidResolutionModes[violation.id] === "STEAM_ID" ? (
+                                <input
+                                  className="max-w-56 rounded border border-slate-300 px-2 py-1 text-xs"
+                                  placeholder="SteamID64 / [U:1:X] / STEAM_X:Y:Z"
+                                  value={correctedSteamIds[violation.id] || ""}
+                                  onChange={(event) =>
+                                    setCorrectedSteamIds((current) => ({
+                                      ...current,
+                                      [violation.id]: event.target.value,
+                                    }))
+                                  }
+                                />
+                              ) : null}
+                            </>
+                          )}
                           <button className="bg-slate-900 px-2 py-1 text-xs text-white" onClick={() => resolveViolation(violation)}>
-                            Resolved
+                            Resolve
                           </button>
                         </div>
                       ) : (

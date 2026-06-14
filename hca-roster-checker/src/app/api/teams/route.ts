@@ -28,6 +28,9 @@ export async function GET(request: Request) {
     orderBy: { name: "asc" },
     include: {
       rosterEntries: {
+        where: {
+          status: "ACTIVE",
+        },
         select: {
           id: true,
         },
