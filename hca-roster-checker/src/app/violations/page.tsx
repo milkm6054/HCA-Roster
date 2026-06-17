@@ -35,6 +35,43 @@ type ResolvedViolation = {
 
 const typeOptions = ["", "DUPLICATE_ROSTER", "INVALID_STEAM_ID"] as const;
 
+function getViolationDetailsText(violation: Violation): string {
+  const details =
+    violation.details && typeof violation.details === "object" && !Array.isArray(violation.details)
+      ? (violation.details as Record<string, unknown>)
+      : null;
+
+  if (violation.type === "DUPLICATE_ROSTER") {
+    const conflictingTeamNames = Array.isArray(details?.conflictingTeamNames)
+      ? details.conflictingTeamNames.filter((item): item is string => typeof item === "string")
+      : [];
+
+    if (conflictingTeamNames.length > 0) {
+      return conflictingTeamNames.join(", ");
+    }
+
+    const currentTeamName = violation.team?.name || null;
+    const fallbackNames = (violation.player?.rosterEntries || [])
+      .map((entry) => entry.team.name)
+      .filter((name) => name && name !== currentTeamName);
+
+    return fallbackNames.length > 0 ? fallbackNames.join(", ") : "Conflicting team not available";
+  }
+
+  const issue =
+    details?.issue && typeof details.issue === "object" && !Array.isArray(details.issue)
+      ? (details.issue as Record<string, unknown>)
+      : null;
+  const message =
+    typeof issue?.message === "string"
+      ? issue.message
+      : typeof details?.resolution === "string"
+        ? details.resolution
+        : null;
+
+  return message || "Needs a valid Steam ID or Game Pass confirmation";
+}
+
 export default function ViolationsPage() {
   const [role, setRole] = useState<"HCA_ORGA" | "TEAM_REP" | null>(null);
   const [type, setType] = useState<(typeof typeOptions)[number]>("");
@@ -132,7 +169,7 @@ export default function ViolationsPage() {
   }
 
   const groupedViolations = violations.reduce<Record<string, Violation[]>>((groups, violation) => {
-    const teamName = violation.team?.name || "Unassigned";
+    const teamName = violation.team?.name || "Unknown team";
     if (!groups[teamName]) {
       groups[teamName] = [];
     }
@@ -192,9 +229,7 @@ export default function ViolationsPage() {
                     <td className="px-4 py-3">{violation.player?.displayName || "-"}</td>
                     <td className="px-4 py-3">{violation.severity}</td>
                     <td className="px-4 py-3 font-mono text-xs">{violation.rawSteamId || "-"}</td>
-                    <td className="max-w-xs px-4 py-3 text-xs">
-                      <pre className="overflow-auto whitespace-pre-wrap">{JSON.stringify(violation.details, null, 2)}</pre>
-                    </td>
+                    <td className="max-w-xs px-4 py-3 text-xs text-slate-600">{getViolationDetailsText(violation)}</td>
                     <td className="space-y-2 px-4 py-3">
                       {role === "HCA_ORGA" ? (
                         <div className="flex flex-col gap-2">

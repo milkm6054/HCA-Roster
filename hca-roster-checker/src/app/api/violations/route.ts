@@ -14,12 +14,23 @@ export async function GET(request: Request) {
   const auth = await requireApiSession(request);
   if (!auth.ok) return auth.response;
 
-  await prisma.violation.deleteMany({
-    where: {
-      type: ViolationType.UNREGISTERED_PLAYER,
-      matchId: null,
-    },
-  });
+  await Promise.all([
+    prisma.violation.deleteMany({
+      where: {
+        type: ViolationType.UNREGISTERED_PLAYER,
+        matchId: null,
+      },
+    }),
+    prisma.violation.deleteMany({
+      where: {
+        type: {
+          in: [ViolationType.DUPLICATE_ROSTER, ViolationType.INVALID_STEAM_ID],
+        },
+        teamId: null,
+        matchId: null,
+      },
+    }),
+  ]);
 
   const { searchParams } = new URL(request.url);
   const type = searchParams.get("type");
@@ -39,7 +50,11 @@ export async function GET(request: Request) {
           in: [ViolationType.DUPLICATE_ROSTER, ViolationType.INVALID_STEAM_ID],
         },
         status: violationStatus,
-        teamId: isOrga(auth.session) ? undefined : (auth.session.teamId ?? "__no_team__"),
+        teamId: isOrga(auth.session)
+          ? {
+              not: null,
+            }
+          : (auth.session.teamId ?? "__no_team__"),
       },
       include: {
         team: true,
