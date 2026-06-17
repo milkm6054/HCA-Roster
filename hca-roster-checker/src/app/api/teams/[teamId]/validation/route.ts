@@ -19,12 +19,24 @@ export async function GET(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  await prisma.violation.deleteMany({
-    where: {
-      type: ViolationType.UNREGISTERED_PLAYER,
-      matchId: null,
-    },
-  });
+  await Promise.all([
+    prisma.violation.deleteMany({
+      where: {
+        type: ViolationType.UNREGISTERED_PLAYER,
+        matchId: null,
+      },
+    }),
+    prisma.violation.deleteMany({
+      where: {
+        type: ViolationType.DUPLICATE_ROSTER,
+        matchId: null,
+        details: {
+          path: ["issue", "type"],
+          equals: "DUPLICATE_IN_UPLOAD",
+        },
+      },
+    }),
+  ]);
 
   const violations = await prisma.violation.findMany({
     where: {

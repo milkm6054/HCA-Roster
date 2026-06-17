@@ -30,6 +30,16 @@ export async function GET(request: Request) {
         matchId: null,
       },
     }),
+    prisma.violation.deleteMany({
+      where: {
+        type: ViolationType.DUPLICATE_ROSTER,
+        matchId: null,
+        details: {
+          path: ["issue", "type"],
+          equals: "DUPLICATE_IN_UPLOAD",
+        },
+      },
+    }),
   ]);
 
   const { searchParams } = new URL(request.url);

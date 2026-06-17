@@ -78,17 +78,15 @@ export async function POST(
   let acceptedPlayers = 0;
 
   await prisma.$transaction(async (tx) => {
-    if (gamespassMembers.length > 0) {
-      await tx.violation.deleteMany({
-        where: {
-          teamId,
-          type: ViolationType.INVALID_STEAM_ID,
-          rawSteamId: {
-            in: gamespassMembers.map((member) => member.id),
-          },
+    await tx.violation.deleteMany({
+      where: {
+        teamId,
+        matchId: null,
+        type: {
+          in: [ViolationType.INVALID_STEAM_ID, ViolationType.DUPLICATE_ROSTER],
         },
-      });
-    }
+      },
+    });
 
     for (const normalized of uniqueRows.values()) {
       const age = estimateSteamAccountCreatedAt(normalized.steamId64);
@@ -143,7 +141,6 @@ export async function POST(
     for (const issue of validation.issues) {
       const shouldPersist =
         issue.type === "INVALID_STEAM_ID" ||
-        issue.type === "DUPLICATE_IN_UPLOAD" ||
         issue.type === "DUPLICATE_ACROSS_TEAMS";
 
       if (!shouldPersist) {
