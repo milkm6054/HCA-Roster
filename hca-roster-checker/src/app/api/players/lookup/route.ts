@@ -27,6 +27,21 @@ export async function GET(request: Request) {
   const player = await prisma.player.findUnique({
     where: { steamId64: normalized.steamId64 },
     include: {
+      rosterEntries: {
+        where: {
+          status: "ACTIVE",
+        },
+        include: {
+          team: {
+            select: {
+              name: true,
+            },
+          },
+        },
+        orderBy: {
+          submittedAt: "desc",
+        },
+      },
       matchPlayers: {
         include: {
           match: {
@@ -82,6 +97,7 @@ export async function GET(request: Request) {
     player: {
       steamId64: player.steamId64,
       displayName: player.displayName,
+      currentTeams: player.rosterEntries.map((entry) => entry.team.name),
       matchStats: entries.map((entry) => ({
         id: entry.id,
         matchId: entry.matchId,

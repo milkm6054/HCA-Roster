@@ -7,6 +7,7 @@ type PlayerLookupResult = {
   player: {
     steamId64: string;
     displayName?: string | null;
+    currentTeams: string[];
     averageStats: {
       matches: number;
       kills: number;
@@ -97,6 +98,9 @@ export default function PlayersPage() {
             <div className="surface-card p-5 xl:col-span-2">
               <p className="text-xs uppercase tracking-[0.2em] muted-copy">Player</p>
               <p className="mt-3 text-2xl font-semibold">{result.player.displayName || result.player.steamId64}</p>
+              <p className="mt-2 text-sm muted-copy">
+                Team: {result.player.currentTeams.length > 0 ? result.player.currentTeams.join(", ") : "No active team"}
+              </p>
               <p className="mt-2 font-mono text-xs muted-copy">{result.player.steamId64}</p>
             </div>
             <div className="surface-card p-5">
