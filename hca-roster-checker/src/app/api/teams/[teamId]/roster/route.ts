@@ -109,6 +109,12 @@ export async function GET(
       ? (latestUploadLog.details as Record<string, unknown>)
       : null;
   const uploadSeason = typeof uploadDetails?.season === "string" ? uploadDetails.season : null;
+  const latestUploadedCsvText =
+    uploadSeason === season && typeof uploadDetails?.csvText === "string" ? uploadDetails.csvText : null;
+  const latestUploadedSourceFileName =
+    uploadSeason === season && typeof uploadDetails?.sourceFileName === "string"
+      ? uploadDetails.sourceFileName
+      : null;
   const uploadedGamespassMembers =
     uploadSeason === season && Array.isArray(uploadDetails?.gamespassMembers)
       ? uploadDetails.gamespassMembers
@@ -155,5 +161,7 @@ export async function GET(
     hasSubmittedRoster: submittedEntriesCount > 0,
     changes,
     gamespassMembers,
+    latestUploadedCsvText,
+    latestUploadedSourceFileName,
   });
 }

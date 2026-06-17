@@ -185,6 +185,8 @@ export async function POST(
       invalidRows: validation.invalidRows,
       malformedRows: parsed.malformedRows.length,
       gamespassMembers,
+      sourceFileName: sourceFileName || null,
+      csvText,
     },
   });
 

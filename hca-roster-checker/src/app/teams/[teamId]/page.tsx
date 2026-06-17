@@ -139,6 +139,8 @@ export default function TeamDetailPage() {
   const [changes, setChanges] = useState<RosterChange[]>([]);
   const [violations, setViolations] = useState<Violation[]>([]);
   const [gamespassMembers, setGamespassMembers] = useState<GamespassMember[]>([]);
+  const [latestUploadedCsvText, setLatestUploadedCsvText] = useState("");
+  const [latestUploadedSourceFileName, setLatestUploadedSourceFileName] = useState<string | null>(null);
 
   const [csvText, setCsvText] = useState("name,steam_id\n");
   const [file, setFile] = useState<File | null>(null);
@@ -154,7 +156,6 @@ export default function TeamDetailPage() {
   const [warningSelectedTeams, setWarningSelectedTeams] = useState<Record<string, string>>({});
   const [warningResolutionModes, setWarningResolutionModes] = useState<Record<string, "STEAM_ID" | "GAMESPASS" | "REMOVE_INVALID_ENTRY" | "">>({});
   const [warningCorrectedSteamIds, setWarningCorrectedSteamIds] = useState<Record<string, string>>({});
-  const [selectedInvalidWarnings, setSelectedInvalidWarnings] = useState<Record<string, boolean>>({});
 
   async function refreshData() {
     const [meRes, teamRes, rosterRes, validationRes] = await Promise.all([
@@ -175,6 +176,8 @@ export default function TeamDetailPage() {
     setHasSubmittedRoster(Boolean(rosterData.hasSubmittedRoster));
     setChanges(rosterData.changes || []);
     setGamespassMembers(rosterData.gamespassMembers || []);
+    setLatestUploadedCsvText(rosterData.latestUploadedCsvText || "");
+    setLatestUploadedSourceFileName(rosterData.latestUploadedSourceFileName || null);
     setViolations(validationData.violations || []);
   }
 
@@ -202,6 +205,8 @@ export default function TeamDetailPage() {
         setHasSubmittedRoster(Boolean(rosterData.hasSubmittedRoster));
         setChanges(rosterData.changes || []);
         setGamespassMembers(rosterData.gamespassMembers || []);
+        setLatestUploadedCsvText(rosterData.latestUploadedCsvText || "");
+        setLatestUploadedSourceFileName(rosterData.latestUploadedSourceFileName || null);
         setViolations(validationData.violations || []);
       }
     })();
@@ -426,11 +431,6 @@ export default function TeamDetailPage() {
   const canSubmitInitialRoster = role === "HCA_ORGA" || !hasSubmittedRoster;
   const normalizedMemberSearch = memberSearch.trim().toLowerCase();
   const sampleRosterCsvHref = `data:text/csv;charset=utf-8,${encodeURIComponent(SAMPLE_ROSTER_CSV)}`;
-  const duplicateWarnings = violations.filter((violation) => violation.type === "DUPLICATE_ROSTER");
-  const invalidWarnings = violations.filter((violation) => violation.type === "INVALID_STEAM_ID");
-  const selectedInvalidWarningIds = invalidWarnings
-    .filter((violation) => selectedInvalidWarnings[violation.id])
-    .map((violation) => violation.id);
   const filteredRoster = roster.filter((entry) => {
     if (!normalizedMemberSearch) {
       return true;
@@ -454,39 +454,6 @@ export default function TeamDetailPage() {
 
     return rosterSortDirection === "asc" ? comparison : comparison * -1;
   });
-
-  async function bulkResolveInvalidWarnings(action: "GAMESPASS" | "REMOVE_INVALID_ENTRY") {
-    if (selectedInvalidWarningIds.length === 0) {
-      setError("Select at least one invalid Steam ID warning first.");
-      return;
-    }
-
-    setBusyAction(true);
-    setError("");
-
-    try {
-      for (const violationId of selectedInvalidWarningIds) {
-        const res = await fetch(`/api/violations/${violationId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            resolutionType: action,
-          }),
-        });
-
-        const data = await res.json();
-        if (!res.ok) {
-          setError(data.error || "Failed to resolve one or more invalid Steam ID warnings.");
-          return;
-        }
-      }
-
-      setSelectedInvalidWarnings({});
-      await refreshData();
-    } finally {
-      setBusyAction(false);
-    }
-  }
 
   return (
     <section className="space-y-6">
@@ -558,182 +525,6 @@ export default function TeamDetailPage() {
             </p>
           </div>
         </div>
-
-        {violations.length > 0 ? (
-          <div className="grid gap-4 xl:grid-cols-2">
-            <section className="rounded-lg border border-amber-200 bg-white p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-base font-semibold text-amber-950">Invalid Steam ID fixes</h3>
-                  <p className="text-sm text-amber-900">Resolve or remove bad IDs directly from this team view.</p>
-                </div>
-                <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-950">
-                  {invalidWarnings.length}
-                </span>
-              </div>
-
-              {role === "HCA_ORGA" && invalidWarnings.length > 0 ? (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    className="bg-slate-900 px-3 py-1 text-xs text-white"
-                    onClick={() => bulkResolveInvalidWarnings("GAMESPASS")}
-                    disabled={busyAction || selectedInvalidWarningIds.length === 0}
-                  >
-                    Mark selected as Game Pass
-                  </button>
-                  <button
-                    type="button"
-                    className="bg-slate-700 px-3 py-1 text-xs text-white"
-                    onClick={() => bulkResolveInvalidWarnings("REMOVE_INVALID_ENTRY")}
-                    disabled={busyAction || selectedInvalidWarningIds.length === 0}
-                  >
-                    Remove selected invalid rows
-                  </button>
-                </div>
-              ) : null}
-
-              <div className="mt-4 space-y-3">
-                {invalidWarnings.map((issue) => (
-                  <div key={issue.id} className="rounded-lg border border-amber-100 bg-amber-50/40 p-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="space-y-1">
-                        <p className="font-medium text-amber-950">{getViolationDisplayName(issue)}</p>
-                        <p className="font-mono text-xs text-amber-900">{issue.rawSteamId || "-"}</p>
-                      </div>
-                      {role === "HCA_ORGA" ? (
-                        <label className="flex items-center gap-2 text-xs text-amber-950">
-                          <input
-                            type="checkbox"
-                            checked={Boolean(selectedInvalidWarnings[issue.id])}
-                            onChange={(event) =>
-                              setSelectedInvalidWarnings((current) => ({
-                                ...current,
-                                [issue.id]: event.target.checked,
-                              }))
-                            }
-                          />
-                          Select
-                        </label>
-                      ) : null}
-                    </div>
-
-                    {role === "HCA_ORGA" ? (
-                      <div className="mt-3 flex flex-col gap-2">
-                        <select
-                          className="rounded border border-amber-200 px-2 py-1 text-xs"
-                          value={warningResolutionModes[issue.id] || ""}
-                          onChange={(event) =>
-                            setWarningResolutionModes((current) => ({
-                              ...current,
-                              [issue.id]: event.target.value as "STEAM_ID" | "GAMESPASS" | "REMOVE_INVALID_ENTRY" | "",
-                            }))
-                          }
-                        >
-                          <option value="">Select resolution</option>
-                          <option value="STEAM_ID">Enter valid Steam ID</option>
-                          <option value="GAMESPASS">Game Pass ID</option>
-                          <option value="REMOVE_INVALID_ENTRY">Remove invalid entry</option>
-                        </select>
-                        {warningResolutionModes[issue.id] === "STEAM_ID" ? (
-                          <input
-                            className="rounded border border-amber-200 px-2 py-1 text-xs"
-                            placeholder="SteamID64 / [U:1:X] / STEAM_X:Y:Z"
-                            value={warningCorrectedSteamIds[issue.id] || ""}
-                            onChange={(event) =>
-                              setWarningCorrectedSteamIds((current) => ({
-                                ...current,
-                                [issue.id]: event.target.value,
-                              }))
-                            }
-                          />
-                        ) : null}
-                        <button
-                          type="button"
-                          className="w-fit bg-slate-900 px-3 py-1 text-xs text-white"
-                          onClick={() => resolveWarning(issue)}
-                          disabled={busyAction}
-                        >
-                          {busyAction ? "Working..." : "Resolve"}
-                        </button>
-                      </div>
-                    ) : null}
-                  </div>
-                ))}
-
-                {invalidWarnings.length === 0 ? (
-                  <div className="rounded-lg border border-amber-100 bg-amber-50/40 px-3 py-4 text-sm text-amber-900">
-                    No invalid Steam ID warnings for this team.
-                  </div>
-                ) : null}
-              </div>
-            </section>
-
-            <section className="rounded-lg border border-amber-200 bg-white p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-base font-semibold text-amber-950">Duplicate roster fixes</h3>
-                  <p className="text-sm text-amber-900">Choose which team each conflicting player should stay on.</p>
-                </div>
-                <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-950">
-                  {duplicateWarnings.length}
-                </span>
-              </div>
-
-              <div className="mt-4 space-y-3">
-                {duplicateWarnings.map((issue) => (
-                  <div key={issue.id} className="rounded-lg border border-amber-100 bg-amber-50/40 p-3">
-                    <div className="space-y-1">
-                      <p className="font-medium text-amber-950">{getViolationDisplayName(issue)}</p>
-                      <p className="text-sm text-amber-900">
-                        Conflicting with: {getConflictingTeams(issue.details).join(", ") || "Unknown"}
-                      </p>
-                      <p className="font-mono text-xs text-amber-900">{issue.rawSteamId || "-"}</p>
-                    </div>
-
-                    {role === "HCA_ORGA" ? (
-                      <div className="mt-3 flex flex-col gap-2">
-                        <select
-                          className="rounded border border-amber-200 px-2 py-1 text-xs"
-                          value={warningSelectedTeams[issue.id] || ""}
-                          onChange={(event) =>
-                            setWarningSelectedTeams((current) => ({
-                              ...current,
-                              [issue.id]: event.target.value,
-                            }))
-                          }
-                        >
-                          <option value="">Select team</option>
-                          {(issue.player?.rosterEntries || [])
-                            .filter((entry, index, list) => list.findIndex((candidate) => candidate.teamId === entry.teamId) === index)
-                            .map((entry) => (
-                              <option key={entry.id} value={entry.teamId}>
-                                {entry.team.name}
-                              </option>
-                            ))}
-                        </select>
-                        <button
-                          type="button"
-                          className="w-fit bg-slate-900 px-3 py-1 text-xs text-white"
-                          onClick={() => resolveWarning(issue)}
-                          disabled={busyAction}
-                        >
-                          {busyAction ? "Working..." : "Resolve"}
-                        </button>
-                      </div>
-                    ) : null}
-                  </div>
-                ))}
-
-                {duplicateWarnings.length === 0 ? (
-                  <div className="rounded-lg border border-amber-100 bg-amber-50/40 px-3 py-4 text-sm text-amber-900">
-                    No duplicate roster conflicts for this team.
-                  </div>
-                ) : null}
-              </div>
-            </section>
-          </div>
-        ) : null}
 
         {violations.length > 0 ? (
           <div className="overflow-hidden rounded-lg border border-amber-200 bg-white">
@@ -878,6 +669,40 @@ export default function TeamDetailPage() {
           Initial roster already submitted. Use the controls below to add or remove players.
         </div>
       )}
+
+      {latestUploadedCsvText ? (
+        <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold">Latest uploaded raw CSV</h2>
+              <p className="text-sm text-slate-500">
+                Inspect the original roster upload to see what caused validation issues.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {latestUploadedSourceFileName ? (
+                <span className="text-xs text-slate-500">{latestUploadedSourceFileName}</span>
+              ) : null}
+              <button
+                type="button"
+                className="bg-slate-700 px-3 py-1 text-xs text-white"
+                onClick={() => {
+                  setCsvText(latestUploadedCsvText);
+                  setFile(null);
+                }}
+              >
+                Load into editor
+              </button>
+            </div>
+          </div>
+
+          <textarea
+            className="h-40 w-full"
+            value={latestUploadedCsvText}
+            readOnly
+          />
+        </section>
+      ) : null}
 
       <form onSubmit={addPlayer} className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 md:grid-cols-3">
         <input
