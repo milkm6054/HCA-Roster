@@ -68,6 +68,9 @@ export async function POST(
       uniqueRows.set(row.steamId64, row);
     }
   }
+  const displayNameByRowNumber = new Map(
+    parsed.rows.map((row) => [row.rowNumber, row.displayName || null] as const),
+  );
 
   const playerSnapshotBySteamId = new Map<string, { playerId: string; displayName: string | null }>();
 
@@ -162,7 +165,7 @@ export async function POST(
             issue,
             displayName: issue.steamId64
               ? playerSnapshotBySteamId.get(issue.steamId64)?.displayName || null
-              : null,
+              : displayNameByRowNumber.get(issue.rowNumbers?.[0] ?? -1) || null,
             season,
             sourceFileName,
           } as Prisma.JsonObject,

@@ -72,6 +72,20 @@ function getViolationDetailsText(violation: Violation): string {
   return message || "Needs a valid Steam ID or Game Pass confirmation";
 }
 
+function getViolationPlayerName(violation: Violation): string {
+  if (violation.player?.displayName) {
+    return violation.player.displayName;
+  }
+
+  const details =
+    violation.details && typeof violation.details === "object" && !Array.isArray(violation.details)
+      ? (violation.details as Record<string, unknown>)
+      : null;
+  const detailName = typeof details?.displayName === "string" ? details.displayName : null;
+
+  return detailName || "-";
+}
+
 export default function ViolationsPage() {
   const [role, setRole] = useState<"HCA_ORGA" | "TEAM_REP" | null>(null);
   const [type, setType] = useState<(typeof typeOptions)[number]>("");
@@ -247,7 +261,7 @@ export default function ViolationsPage() {
                 {teamViolations.map((violation) => (
                   <tr key={violation.id} className="border-t border-slate-100 align-top">
                     <td className="px-4 py-3">{violation.type}</td>
-                    <td className="px-4 py-3">{violation.player?.displayName || "-"}</td>
+                    <td className="px-4 py-3">{getViolationPlayerName(violation)}</td>
                     <td className="px-4 py-3">{violation.severity}</td>
                     <td className="px-4 py-3 font-mono text-xs">{violation.rawSteamId || "-"}</td>
                     <td className="max-w-xs px-4 py-3 text-sm text-slate-600">{getViolationDetailsText(violation)}</td>
