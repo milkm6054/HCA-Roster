@@ -178,10 +178,31 @@ export default function ViolationsPage() {
   }, {});
 
   const groupedEntries = Object.entries(groupedViolations).sort(([left], [right]) => left.localeCompare(right));
+  const conflictingPlayersCount = new Set(
+    violations
+      .filter((violation) => violation.type === "DUPLICATE_ROSTER")
+      .map((violation) => violation.rawSteamId || violation.player?.displayName || violation.id),
+  ).size;
+  const invalidSteamIdsCount = violations.filter((violation) => violation.type === "INVALID_STEAM_ID").length;
 
   return (
     <section className="space-y-6">
       <h1 className="text-2xl font-semibold tracking-tight">Violations</h1>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-lg border border-slate-200 bg-white px-4 py-4">
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Number of violations</p>
+          <p className="mt-2 text-2xl font-semibold">{violations.length}</p>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-white px-4 py-4">
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Number of conflicting players</p>
+          <p className="mt-2 text-2xl font-semibold">{conflictingPlayersCount}</p>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-white px-4 py-4">
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Number of invalid Steam IDs</p>
+          <p className="mt-2 text-2xl font-semibold">{invalidSteamIdsCount}</p>
+        </div>
+      </div>
 
       <div className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 md:grid-cols-4">
         <select value={type} onChange={(event) => setType(event.target.value as (typeof typeOptions)[number])}>
@@ -229,7 +250,7 @@ export default function ViolationsPage() {
                     <td className="px-4 py-3">{violation.player?.displayName || "-"}</td>
                     <td className="px-4 py-3">{violation.severity}</td>
                     <td className="px-4 py-3 font-mono text-xs">{violation.rawSteamId || "-"}</td>
-                    <td className="max-w-xs px-4 py-3 text-xs text-slate-600">{getViolationDetailsText(violation)}</td>
+                    <td className="max-w-xs px-4 py-3 text-sm text-slate-600">{getViolationDetailsText(violation)}</td>
                     <td className="space-y-2 px-4 py-3">
                       {role === "HCA_ORGA" ? (
                         <div className="flex flex-col gap-2">
