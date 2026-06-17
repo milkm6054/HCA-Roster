@@ -92,7 +92,7 @@ export default function ViolationsPage() {
   const [violations, setViolations] = useState<Violation[]>([]);
   const [resolvedViolations, setResolvedViolations] = useState<ResolvedViolation[]>([]);
   const [selectedTeams, setSelectedTeams] = useState<Record<string, string>>({});
-  const [invalidResolutionModes, setInvalidResolutionModes] = useState<Record<string, "STEAM_ID" | "GAMESPASS" | "">>({});
+  const [invalidResolutionModes, setInvalidResolutionModes] = useState<Record<string, "STEAM_ID" | "GAMESPASS" | "REMOVE_INVALID_ENTRY" | "">>({});
   const [correctedSteamIds, setCorrectedSteamIds] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -291,17 +291,18 @@ export default function ViolationsPage() {
                               <select
                                 className="max-w-48 rounded border border-slate-300 px-2 py-1 text-xs"
                                 value={invalidResolutionModes[violation.id] || ""}
-                                onChange={(event) =>
-                                  setInvalidResolutionModes((current) => ({
-                                    ...current,
-                                    [violation.id]: event.target.value as "STEAM_ID" | "GAMESPASS" | "",
-                                  }))
-                                }
-                              >
-                                <option value="">Select resolution</option>
-                                <option value="STEAM_ID">Enter valid Steam ID</option>
-                                <option value="GAMESPASS">Game Pass ID</option>
-                              </select>
+                                  onChange={(event) =>
+                                    setInvalidResolutionModes((current) => ({
+                                      ...current,
+                                      [violation.id]: event.target.value as "STEAM_ID" | "GAMESPASS" | "REMOVE_INVALID_ENTRY" | "",
+                                    }))
+                                  }
+                                >
+                                  <option value="">Select resolution</option>
+                                  <option value="STEAM_ID">Enter valid Steam ID</option>
+                                  <option value="GAMESPASS">Game Pass ID</option>
+                                  <option value="REMOVE_INVALID_ENTRY">Remove invalid entry</option>
+                                </select>
                               {invalidResolutionModes[violation.id] === "STEAM_ID" ? (
                                 <input
                                   className="max-w-56 rounded border border-slate-300 px-2 py-1 text-xs"
