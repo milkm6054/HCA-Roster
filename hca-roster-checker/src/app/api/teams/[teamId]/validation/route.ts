@@ -35,7 +35,21 @@ export async function GET(
       },
     },
     include: {
-      player: true,
+      player: {
+        include: {
+          rosterEntries: {
+            where: {
+              status: "ACTIVE",
+            },
+            include: {
+              team: true,
+            },
+            orderBy: {
+              submittedAt: "desc",
+            },
+          },
+        },
+      },
       match: {
         include: {
           teamA: true,

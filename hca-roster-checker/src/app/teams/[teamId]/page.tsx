@@ -45,7 +45,7 @@ type RosterChange = {
 
 type Violation = {
   id: string;
-  type: string;
+  type: "DUPLICATE_ROSTER" | "INVALID_STEAM_ID";
   severity: string;
   status: string;
   rawSteamId?: string | null;
@@ -53,6 +53,13 @@ type Violation = {
   createdAt: string;
   player?: {
     displayName?: string | null;
+    rosterEntries?: Array<{
+      id: string;
+      teamId: string;
+      team: {
+        name: string;
+      };
+    }>;
   } | null;
   match?: {
     week: number;
@@ -107,6 +114,19 @@ function getConflictingTeams(details: unknown): string[] {
     .filter((team, index, list) => list.findIndex((candidate) => candidate === team) === index);
 }
 
+function getViolationDisplayName(violation: Violation): string {
+  if (violation.player?.displayName) {
+    return violation.player.displayName;
+  }
+
+  if (!violation.details || typeof violation.details !== "object" || Array.isArray(violation.details)) {
+    return "-";
+  }
+
+  const details = violation.details as Record<string, unknown>;
+  return typeof details.displayName === "string" ? details.displayName : "-";
+}
+
 export default function TeamDetailPage() {
   const params = useParams<{ teamId: string }>();
   const teamId = params.teamId;
@@ -131,6 +151,10 @@ export default function TeamDetailPage() {
   const [memberSearch, setMemberSearch] = useState("");
   const [rosterSortKey, setRosterSortKey] = useState<RosterSortKey>("submittedAt");
   const [rosterSortDirection, setRosterSortDirection] = useState<RosterSortDirection>("desc");
+  const [warningSelectedTeams, setWarningSelectedTeams] = useState<Record<string, string>>({});
+  const [warningResolutionModes, setWarningResolutionModes] = useState<Record<string, "STEAM_ID" | "GAMESPASS" | "REMOVE_INVALID_ENTRY" | "">>({});
+  const [warningCorrectedSteamIds, setWarningCorrectedSteamIds] = useState<Record<string, string>>({});
+  const [selectedInvalidWarnings, setSelectedInvalidWarnings] = useState<Record<string, boolean>>({});
 
   async function refreshData() {
     const [meRes, teamRes, rosterRes, validationRes] = await Promise.all([
@@ -280,6 +304,63 @@ export default function TeamDetailPage() {
     await refreshData();
   }
 
+  async function resolveWarning(violation: Violation) {
+    setBusyAction(true);
+    setError("");
+
+    try {
+      if (violation.type === "DUPLICATE_ROSTER") {
+        const selectedTeamId = warningSelectedTeams[violation.id];
+        if (!selectedTeamId) {
+          setError("Select which team the player should stay on before resolving this conflict.");
+          return;
+        }
+
+        const res = await fetch(`/api/violations/${violation.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ selectedTeamId }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          setError(data.error || "Failed to resolve duplicate roster violation.");
+          return;
+        }
+      } else {
+        const resolutionType = warningResolutionModes[violation.id];
+        if (!resolutionType) {
+          setError("Choose whether this invalid ID should be corrected or marked as Game Pass.");
+          return;
+        }
+
+        if (resolutionType === "STEAM_ID" && !(warningCorrectedSteamIds[violation.id] || "").trim()) {
+          setError("Enter a corrected Steam ID before resolving this warning.");
+          return;
+        }
+
+        const res = await fetch(`/api/violations/${violation.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            resolutionType,
+            correctedSteamId: warningCorrectedSteamIds[violation.id],
+          }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          setError(data.error || "Failed to resolve invalid Steam ID violation.");
+          return;
+        }
+      }
+
+      await refreshData();
+    } finally {
+      setBusyAction(false);
+    }
+  }
+
   async function updateTeamLogo(nextLogoDataUrl: string | null) {
     setBusyLogoAction(true);
     setError("");
@@ -345,6 +426,11 @@ export default function TeamDetailPage() {
   const canSubmitInitialRoster = role === "HCA_ORGA" || !hasSubmittedRoster;
   const normalizedMemberSearch = memberSearch.trim().toLowerCase();
   const sampleRosterCsvHref = `data:text/csv;charset=utf-8,${encodeURIComponent(SAMPLE_ROSTER_CSV)}`;
+  const duplicateWarnings = violations.filter((violation) => violation.type === "DUPLICATE_ROSTER");
+  const invalidWarnings = violations.filter((violation) => violation.type === "INVALID_STEAM_ID");
+  const selectedInvalidWarningIds = invalidWarnings
+    .filter((violation) => selectedInvalidWarnings[violation.id])
+    .map((violation) => violation.id);
   const filteredRoster = roster.filter((entry) => {
     if (!normalizedMemberSearch) {
       return true;
@@ -368,6 +454,39 @@ export default function TeamDetailPage() {
 
     return rosterSortDirection === "asc" ? comparison : comparison * -1;
   });
+
+  async function bulkResolveInvalidWarnings(action: "GAMESPASS" | "REMOVE_INVALID_ENTRY") {
+    if (selectedInvalidWarningIds.length === 0) {
+      setError("Select at least one invalid Steam ID warning first.");
+      return;
+    }
+
+    setBusyAction(true);
+    setError("");
+
+    try {
+      for (const violationId of selectedInvalidWarningIds) {
+        const res = await fetch(`/api/violations/${violationId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            resolutionType: action,
+          }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          setError(data.error || "Failed to resolve one or more invalid Steam ID warnings.");
+          return;
+        }
+      }
+
+      setSelectedInvalidWarnings({});
+      await refreshData();
+    } finally {
+      setBusyAction(false);
+    }
+  }
 
   return (
     <section className="space-y-6">
@@ -441,6 +560,182 @@ export default function TeamDetailPage() {
         </div>
 
         {violations.length > 0 ? (
+          <div className="grid gap-4 xl:grid-cols-2">
+            <section className="rounded-lg border border-amber-200 bg-white p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-semibold text-amber-950">Invalid Steam ID fixes</h3>
+                  <p className="text-sm text-amber-900">Resolve or remove bad IDs directly from this team view.</p>
+                </div>
+                <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-950">
+                  {invalidWarnings.length}
+                </span>
+              </div>
+
+              {role === "HCA_ORGA" && invalidWarnings.length > 0 ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className="bg-slate-900 px-3 py-1 text-xs text-white"
+                    onClick={() => bulkResolveInvalidWarnings("GAMESPASS")}
+                    disabled={busyAction || selectedInvalidWarningIds.length === 0}
+                  >
+                    Mark selected as Game Pass
+                  </button>
+                  <button
+                    type="button"
+                    className="bg-slate-700 px-3 py-1 text-xs text-white"
+                    onClick={() => bulkResolveInvalidWarnings("REMOVE_INVALID_ENTRY")}
+                    disabled={busyAction || selectedInvalidWarningIds.length === 0}
+                  >
+                    Remove selected invalid rows
+                  </button>
+                </div>
+              ) : null}
+
+              <div className="mt-4 space-y-3">
+                {invalidWarnings.map((issue) => (
+                  <div key={issue.id} className="rounded-lg border border-amber-100 bg-amber-50/40 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <p className="font-medium text-amber-950">{getViolationDisplayName(issue)}</p>
+                        <p className="font-mono text-xs text-amber-900">{issue.rawSteamId || "-"}</p>
+                      </div>
+                      {role === "HCA_ORGA" ? (
+                        <label className="flex items-center gap-2 text-xs text-amber-950">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(selectedInvalidWarnings[issue.id])}
+                            onChange={(event) =>
+                              setSelectedInvalidWarnings((current) => ({
+                                ...current,
+                                [issue.id]: event.target.checked,
+                              }))
+                            }
+                          />
+                          Select
+                        </label>
+                      ) : null}
+                    </div>
+
+                    {role === "HCA_ORGA" ? (
+                      <div className="mt-3 flex flex-col gap-2">
+                        <select
+                          className="rounded border border-amber-200 px-2 py-1 text-xs"
+                          value={warningResolutionModes[issue.id] || ""}
+                          onChange={(event) =>
+                            setWarningResolutionModes((current) => ({
+                              ...current,
+                              [issue.id]: event.target.value as "STEAM_ID" | "GAMESPASS" | "REMOVE_INVALID_ENTRY" | "",
+                            }))
+                          }
+                        >
+                          <option value="">Select resolution</option>
+                          <option value="STEAM_ID">Enter valid Steam ID</option>
+                          <option value="GAMESPASS">Game Pass ID</option>
+                          <option value="REMOVE_INVALID_ENTRY">Remove invalid entry</option>
+                        </select>
+                        {warningResolutionModes[issue.id] === "STEAM_ID" ? (
+                          <input
+                            className="rounded border border-amber-200 px-2 py-1 text-xs"
+                            placeholder="SteamID64 / [U:1:X] / STEAM_X:Y:Z"
+                            value={warningCorrectedSteamIds[issue.id] || ""}
+                            onChange={(event) =>
+                              setWarningCorrectedSteamIds((current) => ({
+                                ...current,
+                                [issue.id]: event.target.value,
+                              }))
+                            }
+                          />
+                        ) : null}
+                        <button
+                          type="button"
+                          className="w-fit bg-slate-900 px-3 py-1 text-xs text-white"
+                          onClick={() => resolveWarning(issue)}
+                          disabled={busyAction}
+                        >
+                          {busyAction ? "Working..." : "Resolve"}
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+
+                {invalidWarnings.length === 0 ? (
+                  <div className="rounded-lg border border-amber-100 bg-amber-50/40 px-3 py-4 text-sm text-amber-900">
+                    No invalid Steam ID warnings for this team.
+                  </div>
+                ) : null}
+              </div>
+            </section>
+
+            <section className="rounded-lg border border-amber-200 bg-white p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-semibold text-amber-950">Duplicate roster fixes</h3>
+                  <p className="text-sm text-amber-900">Choose which team each conflicting player should stay on.</p>
+                </div>
+                <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-950">
+                  {duplicateWarnings.length}
+                </span>
+              </div>
+
+              <div className="mt-4 space-y-3">
+                {duplicateWarnings.map((issue) => (
+                  <div key={issue.id} className="rounded-lg border border-amber-100 bg-amber-50/40 p-3">
+                    <div className="space-y-1">
+                      <p className="font-medium text-amber-950">{getViolationDisplayName(issue)}</p>
+                      <p className="text-sm text-amber-900">
+                        Conflicting with: {getConflictingTeams(issue.details).join(", ") || "Unknown"}
+                      </p>
+                      <p className="font-mono text-xs text-amber-900">{issue.rawSteamId || "-"}</p>
+                    </div>
+
+                    {role === "HCA_ORGA" ? (
+                      <div className="mt-3 flex flex-col gap-2">
+                        <select
+                          className="rounded border border-amber-200 px-2 py-1 text-xs"
+                          value={warningSelectedTeams[issue.id] || ""}
+                          onChange={(event) =>
+                            setWarningSelectedTeams((current) => ({
+                              ...current,
+                              [issue.id]: event.target.value,
+                            }))
+                          }
+                        >
+                          <option value="">Select team</option>
+                          {(issue.player?.rosterEntries || [])
+                            .filter((entry, index, list) => list.findIndex((candidate) => candidate.teamId === entry.teamId) === index)
+                            .map((entry) => (
+                              <option key={entry.id} value={entry.teamId}>
+                                {entry.team.name}
+                              </option>
+                            ))}
+                        </select>
+                        <button
+                          type="button"
+                          className="w-fit bg-slate-900 px-3 py-1 text-xs text-white"
+                          onClick={() => resolveWarning(issue)}
+                          disabled={busyAction}
+                        >
+                          {busyAction ? "Working..." : "Resolve"}
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+
+                {duplicateWarnings.length === 0 ? (
+                  <div className="rounded-lg border border-amber-100 bg-amber-50/40 px-3 py-4 text-sm text-amber-900">
+                    No duplicate roster conflicts for this team.
+                  </div>
+                ) : null}
+              </div>
+            </section>
+          </div>
+        ) : null}
+
+        {violations.length > 0 ? (
           <div className="overflow-hidden rounded-lg border border-amber-200 bg-white">
             <table className="w-full border-collapse text-left text-sm">
               <thead className="bg-amber-100/70">
@@ -453,6 +748,7 @@ export default function TeamDetailPage() {
                   <th className="px-4 py-3">Match</th>
                   <th className="px-4 py-3">Steam ID</th>
                   <th className="px-4 py-3">Created</th>
+                  {role === "HCA_ORGA" ? <th className="px-4 py-3">Actions</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -462,7 +758,7 @@ export default function TeamDetailPage() {
                   return (
                     <tr key={issue.id} className="border-t border-amber-100">
                       <td className="px-4 py-3 font-medium text-amber-950">{issue.type}</td>
-                      <td className="px-4 py-3">{issue.player?.displayName || "-"}</td>
+                      <td className="px-4 py-3">{getViolationDisplayName(issue)}</td>
                       <td className="px-4 py-3">
                         {conflictingTeams.length > 0 ? conflictingTeams.join(", ") : "-"}
                       </td>
@@ -475,6 +771,74 @@ export default function TeamDetailPage() {
                       </td>
                       <td className="px-4 py-3 font-mono text-xs">{issue.rawSteamId || "-"}</td>
                       <td className="px-4 py-3">{new Date(issue.createdAt).toLocaleString()}</td>
+                      {role === "HCA_ORGA" ? (
+                        <td className="px-4 py-3">
+                          <div className="flex min-w-[220px] flex-col gap-2">
+                            {issue.type === "DUPLICATE_ROSTER" ? (
+                              <>
+                                <select
+                                  className="rounded border border-amber-200 px-2 py-1 text-xs"
+                                  value={warningSelectedTeams[issue.id] || ""}
+                                  onChange={(event) =>
+                                    setWarningSelectedTeams((current) => ({
+                                      ...current,
+                                      [issue.id]: event.target.value,
+                                    }))
+                                  }
+                                >
+                                  <option value="">Select team</option>
+                                  {(issue.player?.rosterEntries || [])
+                                    .filter((entry, index, list) => list.findIndex((candidate) => candidate.teamId === entry.teamId) === index)
+                                    .map((entry) => (
+                                      <option key={entry.id} value={entry.teamId}>
+                                        {entry.team.name}
+                                      </option>
+                                    ))}
+                                </select>
+                              </>
+                            ) : (
+                              <>
+                                <select
+                                  className="rounded border border-amber-200 px-2 py-1 text-xs"
+                                  value={warningResolutionModes[issue.id] || ""}
+                                  onChange={(event) =>
+                                    setWarningResolutionModes((current) => ({
+                                      ...current,
+                                      [issue.id]: event.target.value as "STEAM_ID" | "GAMESPASS" | "",
+                                    }))
+                                  }
+                                >
+                                  <option value="">Select resolution</option>
+                                  <option value="STEAM_ID">Enter valid Steam ID</option>
+                                  <option value="GAMESPASS">Game Pass ID</option>
+                                  <option value="REMOVE_INVALID_ENTRY">Remove invalid entry</option>
+                                </select>
+                                {warningResolutionModes[issue.id] === "STEAM_ID" ? (
+                                  <input
+                                    className="rounded border border-amber-200 px-2 py-1 text-xs"
+                                    placeholder="SteamID64 / [U:1:X] / STEAM_X:Y:Z"
+                                    value={warningCorrectedSteamIds[issue.id] || ""}
+                                    onChange={(event) =>
+                                      setWarningCorrectedSteamIds((current) => ({
+                                        ...current,
+                                        [issue.id]: event.target.value,
+                                      }))
+                                    }
+                                  />
+                                ) : null}
+                              </>
+                            )}
+                            <button
+                              type="button"
+                              className="bg-slate-900 px-3 py-1 text-xs text-white"
+                              onClick={() => resolveWarning(issue)}
+                              disabled={busyAction}
+                            >
+                              {busyAction ? "Working..." : "Resolve"}
+                            </button>
+                          </div>
+                        </td>
+                      ) : null}
                     </tr>
                   );
                 })}

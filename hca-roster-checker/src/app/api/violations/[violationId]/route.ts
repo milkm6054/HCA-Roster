@@ -20,7 +20,7 @@ export async function PATCH(
   const { violationId } = await params;
   const body = (await request.json()) as {
     selectedTeamId?: string;
-    resolutionType?: "STEAM_ID" | "GAMESPASS";
+    resolutionType?: "STEAM_ID" | "GAMESPASS" | "REMOVE_INVALID_ENTRY";
     correctedSteamId?: string;
   };
 
@@ -118,6 +118,12 @@ export async function PATCH(
         data: { status: ViolationStatus.CONFIRMED },
       });
       resolution = "Confirmed player is a Game Pass player";
+    } else if (resolutionType === "REMOVE_INVALID_ENTRY") {
+      await prisma.violation.update({
+        where: { id: violationId },
+        data: { status: ViolationStatus.CONFIRMED },
+      });
+      resolution = "Removed invalid roster entry";
     } else if (resolutionType === "STEAM_ID") {
       const correctedSteamIdInput = body.correctedSteamId?.trim() || "";
       if (!correctedSteamIdInput) {
