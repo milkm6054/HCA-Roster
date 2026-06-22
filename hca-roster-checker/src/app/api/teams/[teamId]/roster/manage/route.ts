@@ -4,7 +4,7 @@ import { getActor } from "@/lib/auth/getActor";
 import { createAuditLog } from "@/lib/audit/auditLog";
 import { prisma } from "@/lib/prisma";
 import { estimateSteamAccountCreatedAt } from "@/lib/steam/accountAge";
-import { normalizeSteamId } from "@/lib/steam/steamIds";
+import { isLikelyGamespassId, normalizeSteamId } from "@/lib/steam/steamIds";
 
 export const dynamic = "force-dynamic";
 
@@ -22,16 +22,112 @@ export async function POST(
 
   const body = (await request.json()) as {
     steamId?: string;
+    gamepassId?: string;
     displayName?: string;
     season?: string;
   };
 
   const steamIdInput = body.steamId?.trim() || "";
+  const gamepassIdInput = body.gamepassId?.trim() || "";
   const season = body.season?.trim() || "2026-S1";
   const displayName = body.displayName?.trim() || null;
 
-  if (!steamIdInput) {
-    return NextResponse.json({ error: "steamId is required." }, { status: 400 });
+  if (!steamIdInput && !gamepassIdInput) {
+    return NextResponse.json({ error: "steamId or gamepassId is required." }, { status: 400 });
+  }
+
+  if (steamIdInput && gamepassIdInput) {
+    return NextResponse.json({ error: "Submit either a Steam ID or a Game Pass ID, not both." }, { status: 400 });
+  }
+
+  const actor = await getActor(request);
+
+  if (gamepassIdInput) {
+    if (!isLikelyGamespassId(gamepassIdInput)) {
+      return NextResponse.json({ error: "Game Pass ID must be a 32-character hex ID." }, { status: 400 });
+    }
+
+    const [latestUploadLog, addedGamepassLogs] = await Promise.all([
+      prisma.auditLog.findFirst({
+        where: {
+          entityType: "Team",
+          entityId: teamId,
+          action: "ROSTER_UPLOADED",
+        },
+        orderBy: [{ createdAt: "desc" }],
+        select: {
+          details: true,
+        },
+      }),
+      prisma.auditLog.findMany({
+        where: {
+          entityType: "Team",
+          entityId: teamId,
+          action: "ROSTER_GAMEPASS_PLAYER_ADDED",
+        },
+        select: {
+          details: true,
+        },
+      }),
+    ]);
+
+    const uploadedDetails =
+      latestUploadLog?.details &&
+      typeof latestUploadLog.details === "object" &&
+      !Array.isArray(latestUploadLog.details)
+        ? (latestUploadLog.details as Record<string, unknown>)
+        : null;
+    const uploadedGamespassMembers =
+      typeof uploadedDetails?.season === "string" &&
+      uploadedDetails.season === season &&
+      Array.isArray(uploadedDetails.gamespassMembers)
+        ? uploadedDetails.gamespassMembers
+        : [];
+    const manuallyAddedGamepassIds = addedGamepassLogs
+      .map((log) =>
+        log.details && typeof log.details === "object" && !Array.isArray(log.details)
+          ? (log.details as Record<string, unknown>)
+          : null,
+      )
+      .filter((details) => typeof details?.season !== "string" || details.season === season)
+      .map((details) => (typeof details?.gamepassId === "string" ? details.gamepassId : null))
+      .filter((id): id is string => Boolean(id));
+    const uploadedGamepassIds = uploadedGamespassMembers
+      .map((member) =>
+        member && typeof member === "object" && !Array.isArray(member)
+          ? (member as Record<string, unknown>)
+          : null,
+      )
+      .map((member) => (typeof member?.id === "string" ? member.id : null))
+      .filter((id): id is string => Boolean(id));
+    const existingGamepassIds = [...uploadedGamepassIds, ...manuallyAddedGamepassIds];
+
+    if (existingGamepassIds.some((id) => id.toLowerCase() === gamepassIdInput.toLowerCase())) {
+      return NextResponse.json({ error: "Game Pass player is already listed for this team." }, { status: 409 });
+    }
+
+    await createAuditLog({
+      action: "ROSTER_GAMEPASS_PLAYER_ADDED",
+      actor,
+      entityType: "Team",
+      entityId: teamId,
+      details: {
+        season,
+        gamepassId: gamepassIdInput,
+        displayName,
+      },
+    });
+
+    return NextResponse.json(
+      {
+        gamespassMember: {
+          id: gamepassIdInput,
+          displayName,
+          rowNumber: null,
+        },
+      },
+      { status: 201 },
+    );
   }
 
   const normalized = normalizeSteamId(steamIdInput);
@@ -39,7 +135,6 @@ export async function POST(
     return NextResponse.json({ error: normalized.reason }, { status: 400 });
   }
 
-  const actor = await getActor(request);
   const age = estimateSteamAccountCreatedAt(normalized.steamId64);
 
   let player;

@@ -36,9 +36,10 @@ type RosterEntry = {
 
 type RosterChange = {
   id: string;
-  action: "ROSTER_PLAYER_ADDED" | "ROSTER_PLAYER_REMOVED";
+  action: "ROSTER_PLAYER_ADDED" | "ROSTER_PLAYER_REMOVED" | "ROSTER_GAMEPASS_PLAYER_ADDED";
   actor?: string | null;
   steamId64?: string | null;
+  gamepassId?: string | null;
   displayName?: string | null;
   createdAt: string;
 };
@@ -147,6 +148,8 @@ export default function TeamDetailPage() {
   const [uploadResult, setUploadResult] = useState<Record<string, unknown> | null>(null);
   const [addSteamId, setAddSteamId] = useState("");
   const [addDisplayName, setAddDisplayName] = useState("");
+  const [addGamepassId, setAddGamepassId] = useState("");
+  const [addGamepassDisplayName, setAddGamepassDisplayName] = useState("");
   const [busyAction, setBusyAction] = useState(false);
   const [busyLogoAction, setBusyLogoAction] = useState(false);
   const [error, setError] = useState("");
@@ -307,6 +310,36 @@ export default function TeamDetailPage() {
       method: "POST",
     });
     await refreshData();
+  }
+
+  async function addGamepassPlayer(event: React.FormEvent) {
+    event.preventDefault();
+    setBusyAction(true);
+    setError("");
+
+    try {
+      const res = await fetch(`/api/teams/${teamId}/roster/manage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          gamepassId: addGamepassId,
+          displayName: addGamepassDisplayName,
+          season,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Failed to add Game Pass player.");
+        return;
+      }
+
+      setAddGamepassId("");
+      setAddGamepassDisplayName("");
+      await refreshData();
+    } finally {
+      setBusyAction(false);
+    }
   }
 
   async function resolveWarning(violation: Violation) {
@@ -725,6 +758,27 @@ export default function TeamDetailPage() {
         </div>
       </form>
 
+      <form onSubmit={addGamepassPlayer} className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 md:grid-cols-3">
+        <input
+          value={addGamepassId}
+          onChange={(e) => setAddGamepassId(e.target.value)}
+          placeholder="Game Pass ID"
+          required
+          disabled={busyAction}
+        />
+        <input
+          value={addGamepassDisplayName}
+          onChange={(e) => setAddGamepassDisplayName(e.target.value)}
+          placeholder="Display name (optional)"
+          disabled={busyAction}
+        />
+        <div>
+          <button className="bg-slate-900 px-4 py-2 text-white" disabled={busyAction}>
+            {busyAction ? "Working..." : "Add Game Pass player"}
+          </button>
+        </div>
+      </form>
+
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
       {uploadResult ? (
@@ -816,7 +870,7 @@ export default function TeamDetailPage() {
               <tr>
                 <th className="px-4 py-3">Action</th>
                 <th className="px-4 py-3">Player</th>
-                <th className="px-4 py-3">Steam ID</th>
+                <th className="px-4 py-3">Steam / Game Pass ID</th>
                 <th className="px-4 py-3">By</th>
                 <th className="px-4 py-3">When</th>
               </tr>
@@ -825,10 +879,14 @@ export default function TeamDetailPage() {
               {changes.map((change) => (
                 <tr key={change.id} className="border-t border-slate-100">
                   <td className="px-4 py-3">
-                    {change.action === "ROSTER_PLAYER_ADDED" ? "Added" : "Removed"}
+                    {change.action === "ROSTER_PLAYER_REMOVED"
+                      ? "Removed"
+                      : change.action === "ROSTER_GAMEPASS_PLAYER_ADDED"
+                        ? "Added Game Pass"
+                        : "Added"}
                   </td>
                   <td className="px-4 py-3">{change.displayName || "-"}</td>
-                  <td className="px-4 py-3 font-mono text-xs">{change.steamId64 || "-"}</td>
+                  <td className="px-4 py-3 font-mono text-xs">{change.steamId64 || change.gamepassId || "-"}</td>
                   <td className="px-4 py-3">{change.actor || "unknown"}</td>
                   <td className="px-4 py-3">{new Date(change.createdAt).toLocaleString()}</td>
                 </tr>

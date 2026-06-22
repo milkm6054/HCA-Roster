@@ -20,7 +20,7 @@ export async function GET(
   const { searchParams } = new URL(request.url);
   const season = searchParams.get("season") || "2026-S1";
 
-  const [roster, submittedEntriesCount, changeLogs, latestUploadLog, legacyGamespassViolations] = await Promise.all([
+  const [roster, submittedEntriesCount, changeLogs, latestUploadLog, addedGamespassLogs, legacyGamespassViolations] = await Promise.all([
     prisma.rosterEntry.findMany({
       where: {
         teamId,
@@ -41,7 +41,7 @@ export async function GET(
         entityType: "Team",
         entityId: teamId,
         action: {
-          in: ["ROSTER_PLAYER_ADDED", "ROSTER_PLAYER_REMOVED"],
+          in: ["ROSTER_PLAYER_ADDED", "ROSTER_PLAYER_REMOVED", "ROSTER_GAMEPASS_PLAYER_ADDED"],
         },
       },
       orderBy: [{ createdAt: "desc" }],
@@ -63,6 +63,19 @@ export async function GET(
       orderBy: [{ createdAt: "desc" }],
       select: {
         details: true,
+      },
+    }),
+    prisma.auditLog.findMany({
+      where: {
+        entityType: "Team",
+        entityId: teamId,
+        action: "ROSTER_GAMEPASS_PLAYER_ADDED",
+      },
+      orderBy: [{ createdAt: "desc" }],
+      select: {
+        id: true,
+        details: true,
+        createdAt: true,
       },
     }),
     prisma.violation.findMany({
@@ -95,6 +108,7 @@ export async function GET(
         action: log.action,
         actor: log.actor,
         steamId64: typeof details?.steamId64 === "string" ? details.steamId64 : null,
+        gamepassId: typeof details?.gamepassId === "string" ? details.gamepassId : null,
         displayName: typeof details?.displayName === "string" ? details.displayName : null,
         season: detailSeason || season,
         createdAt: log.createdAt,
@@ -151,7 +165,31 @@ export async function GET(
     })
     .filter((member) => member.id);
 
-  const gamespassMembers = [...uploadedGamespassMembers, ...legacyGamespassMembers].filter(
+  const addedGamespassMembers = addedGamespassLogs
+    .map((log) => {
+      const details =
+        log.details && typeof log.details === "object" && !Array.isArray(log.details)
+          ? (log.details as Record<string, unknown>)
+          : null;
+
+      if (typeof details?.season === "string" && details.season !== season) {
+        return null;
+      }
+
+      if (typeof details?.gamepassId !== "string") {
+        return null;
+      }
+
+      return {
+        id: details.gamepassId,
+        displayName: typeof details.displayName === "string" ? details.displayName : null,
+        rowNumber: null,
+        addedAt: log.createdAt,
+      };
+    })
+    .filter((member): member is NonNullable<typeof member> => Boolean(member));
+
+  const gamespassMembers = [...uploadedGamespassMembers, ...addedGamespassMembers, ...legacyGamespassMembers].filter(
     (member, index, list) => list.findIndex((candidate) => candidate.id === member.id) === index,
   );
 
