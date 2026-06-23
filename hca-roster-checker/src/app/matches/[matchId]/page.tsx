@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import { HLL_MAPS } from "@/lib/matches/hllMaps";
 
 type MatchData = {
   id: string;
@@ -9,8 +10,12 @@ type MatchData = {
   mapName?: string | null;
   midpointName?: string | null;
   gameUrl?: string | null;
-  teamA: { name: string; tag?: string | null };
-  teamB: { name: string; tag?: string | null };
+  playedAt?: string | null;
+  axisTeamId?: string | null;
+  alliesTeamId?: string | null;
+  status: "SCHEDULED" | "READY_TO_IMPORT" | "IMPORTED" | "NEEDS_REVIEW";
+  teamA: { id: string; name: string; tag?: string | null };
+  teamB: { id: string; name: string; tag?: string | null };
   matchPlayers: Array<{
     id: string;
     rawSteamId: string;
@@ -56,8 +61,23 @@ export default function MatchDetailPage() {
   const [uploadSummary, setUploadSummary] = useState<Record<string, unknown> | null>(null);
   const [error, setError] = useState("");
   const [busyImport, setBusyImport] = useState(false);
+  const [busySaveDetails, setBusySaveDetails] = useState(false);
   const [streamerPrompt, setStreamerPrompt] = useState<StreamerPromptState | null>(null);
   const [selectedStreamerIds, setSelectedStreamerIds] = useState<string[]>([]);
+  const [editAxisTeamId, setEditAxisTeamId] = useState("");
+  const [editAlliesTeamId, setEditAlliesTeamId] = useState("");
+  const [editMapName, setEditMapName] = useState("");
+  const [editMidpointName, setEditMidpointName] = useState("");
+  const [editGameUrl, setEditGameUrl] = useState("");
+
+  function setMatchWithEditor(nextMatch: MatchData | null) {
+    setMatch(nextMatch);
+    setEditAxisTeamId(nextMatch?.axisTeamId || "");
+    setEditAlliesTeamId(nextMatch?.alliesTeamId || "");
+    setEditMapName(nextMatch?.mapName || "");
+    setEditMidpointName(nextMatch?.midpointName || "");
+    setEditGameUrl(nextMatch?.gameUrl || "");
+  }
 
   function getSuggestedStreamerIds(overflowCount: number, suggestedSteamIds: string[] = []) {
     return suggestedSteamIds.slice(0, overflowCount);
@@ -68,7 +88,7 @@ export default function MatchDetailPage() {
     const meData = await meRes.json();
     const data = await res.json();
     setRole(meData.session?.role || null);
-    setMatch(data.match || null);
+    setMatchWithEditor(data.match || null);
   }
 
   useEffect(() => {
@@ -81,7 +101,7 @@ export default function MatchDetailPage() {
       const data = await res.json();
       if (active) {
         setRole(meData.session?.role || null);
-        setMatch(data.match || null);
+        setMatchWithEditor(data.match || null);
       }
     })();
 
@@ -89,6 +109,36 @@ export default function MatchDetailPage() {
       active = false;
     };
   }, [matchId]);
+
+  async function saveMatchDetails(event: React.FormEvent) {
+    event.preventDefault();
+    setBusySaveDetails(true);
+    setError("");
+
+    try {
+      const res = await fetch(`/api/matches/${matchId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          axisTeamId: editAxisTeamId,
+          alliesTeamId: editAlliesTeamId,
+          mapName: editMapName,
+          midpointName: editMidpointName,
+          gameUrl: editGameUrl,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Failed to save match details.");
+        return;
+      }
+
+      setMatchWithEditor(data.match || null);
+    } finally {
+      setBusySaveDetails(false);
+    }
+  }
 
   async function uploadStats(event: React.FormEvent) {
     event.preventDefault();
@@ -203,12 +253,28 @@ export default function MatchDetailPage() {
 
       <div className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 md:grid-cols-4">
         <div>
-          <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Axis</p>
+          <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Team 1</p>
           <p className="mt-1 font-medium">{match?.teamA.name || "-"}</p>
         </div>
         <div>
-          <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Allies</p>
+          <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Team 2</p>
           <p className="mt-1 font-medium">{match?.teamB.name || "-"}</p>
+        </div>
+        <div>
+          <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Status</p>
+          <p className="mt-1 font-medium">{match?.status?.replaceAll("_", " ") || "-"}</p>
+        </div>
+        <div>
+          <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Played</p>
+          <p className="mt-1 font-medium">{match?.playedAt ? new Date(match.playedAt).toLocaleString() : "-"}</p>
+        </div>
+        <div>
+          <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Axis</p>
+          <p className="mt-1 font-medium">{[match?.teamA, match?.teamB].find((team) => team?.id === match?.axisTeamId)?.name || "-"}</p>
+        </div>
+        <div>
+          <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Allies</p>
+          <p className="mt-1 font-medium">{[match?.teamA, match?.teamB].find((team) => team?.id === match?.alliesTeamId)?.name || "-"}</p>
         </div>
         <div>
           <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Map</p>
@@ -238,6 +304,57 @@ export default function MatchDetailPage() {
           </div>
         ) : null}
       </div>
+
+      {role === "HCA_ORGA" && match ? (
+        <form onSubmit={saveMatchDetails} className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 md:grid-cols-5">
+          <label className="space-y-2">
+            <span className="text-xs uppercase tracking-[0.18em] text-slate-500">Axis team</span>
+            <select value={editAxisTeamId} onChange={(event) => setEditAxisTeamId(event.target.value)} required>
+              <option value="">Select Axis</option>
+              {[match.teamA, match.teamB].map((team) => (
+                <option key={team.id} value={team.id}>
+                  {team.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="space-y-2">
+            <span className="text-xs uppercase tracking-[0.18em] text-slate-500">Allies team</span>
+            <select value={editAlliesTeamId} onChange={(event) => setEditAlliesTeamId(event.target.value)} required>
+              <option value="">Select Allies</option>
+              {[match.teamA, match.teamB].map((team) => (
+                <option key={team.id} value={team.id}>
+                  {team.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="space-y-2">
+            <span className="text-xs uppercase tracking-[0.18em] text-slate-500">Map</span>
+            <select value={editMapName} onChange={(event) => setEditMapName(event.target.value)}>
+              <option value="">Unknown</option>
+              {HLL_MAPS.map((map) => (
+                <option key={map} value={map}>
+                  {map}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="space-y-2">
+            <span className="text-xs uppercase tracking-[0.18em] text-slate-500">Midpoint</span>
+            <input value={editMidpointName} onChange={(event) => setEditMidpointName(event.target.value)} placeholder="Official strongpoint" />
+          </label>
+          <label className="space-y-2">
+            <span className="text-xs uppercase tracking-[0.18em] text-slate-500">Stats link</span>
+            <input type="url" value={editGameUrl} onChange={(event) => setEditGameUrl(event.target.value)} placeholder="http://95.216.175.159:7014/games/33023" />
+          </label>
+          <div className="md:col-span-5">
+            <button className="bg-slate-900 px-4 py-2 text-white" disabled={busySaveDetails}>
+              {busySaveDetails ? "Saving..." : "Save match details"}
+            </button>
+          </div>
+        </form>
+      ) : null}
 
       {role === "HCA_ORGA" ? (
         <form onSubmit={uploadStats} className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">

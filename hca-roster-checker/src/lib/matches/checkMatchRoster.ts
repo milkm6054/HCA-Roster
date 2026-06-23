@@ -173,6 +173,14 @@ export async function checkMatchRoster({
     teamBId: match.teamBId,
     activeRosterByTeam,
   });
+  const sideAssignments = new Map(inferredSideAssignments);
+  if (match.axisTeamId) {
+    sideAssignments.set("axis", match.axisTeamId);
+  }
+  if (match.alliesTeamId) {
+    sideAssignments.set("allies", match.alliesTeamId);
+    sideAssignments.set("allied", match.alliesTeamId);
+  }
 
   await prisma.$transaction(async (tx) => {
     const playerIdBySteamId64 = new Map<string, string>();
@@ -215,7 +223,7 @@ export async function checkMatchRoster({
       const normalizedTeamLabel = normalizeTeamLabel(row.team);
       const teamId =
         teamMap.get(normalizedTeamLabel) ||
-        inferredSideAssignments.get(normalizedTeamLabel) ||
+        sideAssignments.get(normalizedTeamLabel) ||
         (normalizedTeamLabel === "axis"
           ? match.teamAId
           : normalizedTeamLabel === "allies" || normalizedTeamLabel === "allied"

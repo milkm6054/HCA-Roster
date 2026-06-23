@@ -92,7 +92,7 @@ export async function GET(
       playedAt: match.playedAt,
       createdAt: match.createdAt,
       opponent: match.teamB.name,
-      sideLabel: "Axis" as const,
+      sideLabel: match.axisTeamId === teamId ? "Axis" : match.alliesTeamId === teamId ? "Allies" : "Team 1",
       _count: match._count,
     })),
     ...team.matchesAsTeamB.map((match) => ({
@@ -104,7 +104,7 @@ export async function GET(
       playedAt: match.playedAt,
       createdAt: match.createdAt,
       opponent: match.teamA.name,
-      sideLabel: "Allies" as const,
+      sideLabel: match.axisTeamId === teamId ? "Axis" : match.alliesTeamId === teamId ? "Allies" : "Team 2",
       _count: match._count,
     })),
   ]

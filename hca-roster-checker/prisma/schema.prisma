@@ -26,6 +26,13 @@ enum RosterEntryStatus {
   PENDING
 }
 
+enum MatchStatus {
+  SCHEDULED
+  READY_TO_IMPORT
+  IMPORTED
+  NEEDS_REVIEW
+}
+
 enum ViolationType {
   DUPLICATE_ROSTER
   INVALID_STEAM_ID
@@ -119,6 +126,9 @@ model Match {
   week         Int
   teamAId      String
   teamBId      String
+  axisTeamId   String?
+  alliesTeamId String?
+  status       MatchStatus   @default(SCHEDULED)
   mapName      String?
   midpointName String?
   gameUrl      String?
@@ -131,6 +141,7 @@ model Match {
   violations   Violation[]
 
   @@index([week])
+  @@index([status])
 }
 
 model MatchPlayer {

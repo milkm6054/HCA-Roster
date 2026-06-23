@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { MatchStatus } from "@prisma/client";
 import { createAuditLog } from "@/lib/audit/auditLog";
 import { isOrga, requireApiSession } from "@/lib/auth/guards";
 import { getActor } from "@/lib/auth/getActor";
@@ -32,6 +33,10 @@ export async function POST(
 
   if (!match.gameUrl) {
     return NextResponse.json({ error: "This match does not have a game link yet." }, { status: 400 });
+  }
+
+  if (!match.axisTeamId || !match.alliesTeamId) {
+    return NextResponse.json({ error: "Choose Axis and Allies before importing stats." }, { status: 400 });
   }
 
   const body = (await request.json().catch(() => ({}))) as {
@@ -68,6 +73,14 @@ export async function POST(
       totalRows: result.totalRows,
       excludedSteamIds: result.excludedSteamIds,
       summary: result.summary,
+    },
+  });
+
+  await prisma.match.update({
+    where: { id: matchId },
+    data: {
+      status: MatchStatus.IMPORTED,
+      playedAt: match.playedAt || new Date(),
     },
   });
 

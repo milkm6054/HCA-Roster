@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { MatchStatus } from "@prisma/client";
 import { createAuditLog } from "@/lib/audit/auditLog";
 import { isOrga, requireApiSession } from "@/lib/auth/guards";
 import { getActor } from "@/lib/auth/getActor";
@@ -6,6 +7,7 @@ import { readCsvFromRequest } from "@/lib/http/readCsvFromRequest";
 import { checkMatchRoster } from "@/lib/matches/checkMatchRoster";
 import { parseMatchStatsCsv } from "@/lib/matches/parseMatchStatsCsv";
 import { queueNotification } from "@/lib/notifications/notifications";
+import { prisma } from "@/lib/prisma";
 
 export async function POST(
   request: Request,
@@ -42,6 +44,14 @@ export async function POST(
       totalRows: parsed.rows.length,
       malformedRows: parsed.malformedRows.length,
       summary,
+    },
+  });
+
+  await prisma.match.update({
+    where: { id: matchId },
+    data: {
+      status: MatchStatus.IMPORTED,
+      playedAt: new Date(),
     },
   });
 

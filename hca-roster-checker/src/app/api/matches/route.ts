@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
+import { MatchStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { createAuditLog } from "@/lib/audit/auditLog";
 import { isOrga, requireApiSession } from "@/lib/auth/guards";
 import { getActor } from "@/lib/auth/getActor";
 import { HLL_MAPS } from "@/lib/matches/hllMaps";
-import { processLinkedMatchImport } from "@/lib/matches/processLinkedMatchImport";
-import { queueNotification } from "@/lib/notifications/notifications";
 
 export const dynamic = "force-dynamic";
 
@@ -46,15 +45,17 @@ export async function POST(request: Request) {
     week?: number;
     teamAId?: string;
     teamBId?: string;
+    axisTeamId?: string;
+    alliesTeamId?: string;
     mapName?: string;
     midpointName?: string;
     gameUrl?: string;
     playedAt?: string;
   };
 
-  if (!body.week || !body.teamAId || !body.teamBId || !body.mapName || !body.midpointName?.trim()) {
+  if (!body.week || !body.teamAId || !body.teamBId) {
     return NextResponse.json(
-      { error: "week, axis team, allies team, map, and midpoint are required." },
+      { error: "week, team 1, and team 2 are required." },
       { status: 400 },
     );
   }
@@ -66,8 +67,19 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!HLL_MAPS.includes(body.mapName as (typeof HLL_MAPS)[number])) {
+  if (body.mapName && !HLL_MAPS.includes(body.mapName as (typeof HLL_MAPS)[number])) {
     return NextResponse.json({ error: "Please choose a valid HLL map." }, { status: 400 });
+  }
+
+  const fixtureTeamIds = new Set([body.teamAId, body.teamBId]);
+  const axisTeamId = body.axisTeamId?.trim() || null;
+  const alliesTeamId = body.alliesTeamId?.trim() || null;
+  if ((axisTeamId && !fixtureTeamIds.has(axisTeamId)) || (alliesTeamId && !fixtureTeamIds.has(alliesTeamId))) {
+    return NextResponse.json({ error: "Side assignments must use the selected fixture teams." }, { status: 400 });
+  }
+
+  if (axisTeamId && alliesTeamId && axisTeamId === alliesTeamId) {
+    return NextResponse.json({ error: "Axis and Allies must be different teams." }, { status: 400 });
   }
 
   const gameUrl = body.gameUrl?.trim();
@@ -87,8 +99,11 @@ export async function POST(request: Request) {
       week: Number(body.week),
       teamAId: body.teamAId,
       teamBId: body.teamBId,
-      mapName: body.mapName,
-      midpointName: body.midpointName.trim(),
+      axisTeamId,
+      alliesTeamId,
+      status: gameUrl ? MatchStatus.READY_TO_IMPORT : MatchStatus.SCHEDULED,
+      mapName: body.mapName || null,
+      midpointName: body.midpointName?.trim() || null,
       gameUrl: gameUrl || null,
       playedAt: body.playedAt ? new Date(body.playedAt) : null,
     },
@@ -104,61 +119,11 @@ export async function POST(request: Request) {
       mapName: match.mapName,
       midpointName: match.midpointName,
       gameUrl: match.gameUrl,
+      axisTeamId: match.axisTeamId,
+      alliesTeamId: match.alliesTeamId,
+      status: match.status,
     },
   });
 
-  if (!match.gameUrl) {
-    return NextResponse.json({ match }, { status: 201 });
-  }
-
-  const importResult = await processLinkedMatchImport({
-    matchId: match.id,
-    gameUrl: match.gameUrl,
-    excludedSteamIds: [],
-  });
-
-  if (importResult.status === "needs_streamer_selection") {
-    return NextResponse.json(
-      {
-        match,
-        needsStreamerSelection: true,
-        overflowCount: importResult.overflowCount,
-        totalPlayersFound: importResult.totalPlayersFound,
-        suggestedSteamIds: importResult.suggestedSteamIds,
-        candidates: importResult.candidates,
-      },
-      { status: 201 },
-    );
-  }
-
-  await createAuditLog({
-    action: "MATCH_STATS_IMPORTED_FROM_LINK",
-    actor: await getActor(request),
-    entityType: "Match",
-    entityId: match.id,
-    details: {
-      gameUrl: match.gameUrl,
-      totalRows: importResult.totalRows,
-      excludedSteamIds: importResult.excludedSteamIds,
-      summary: importResult.summary,
-      automatic: true,
-    },
-  });
-
-  await queueNotification({
-    type: "MATCH_VIOLATION_ALERT",
-    payload: {
-      matchId: match.id,
-      summary: importResult.summary,
-    },
-  });
-
-  return NextResponse.json(
-    {
-      match,
-      autoImported: true,
-      summary: importResult.summary,
-    },
-    { status: 201 },
-  );
+  return NextResponse.json({ match }, { status: 201 });
 }
