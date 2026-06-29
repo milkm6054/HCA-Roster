@@ -1,5 +1,6 @@
 import { Prisma, ViolationSeverity, ViolationStatus, ViolationType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { isLikelyGamespassId } from "@/lib/steam/steamIds";
 
 export type MatchViolationRerunSummary = {
   matchesChecked: number;
@@ -21,7 +22,102 @@ function emptySummary(): MatchViolationRerunSummary {
   };
 }
 
-export async function rerunMatchRosterViolationsForMatch(matchId: string): Promise<MatchViolationRerunSummary> {
+async function getActiveGamepassIdsByTeam(teamIds: string[], season: string) {
+  const [latestUploadLogs, addedGamespassLogs] = await Promise.all([
+    prisma.auditLog.findMany({
+      where: {
+        entityType: "Team",
+        entityId: { in: teamIds },
+        action: "ROSTER_UPLOADED",
+      },
+      orderBy: [{ createdAt: "desc" }],
+      select: {
+        entityId: true,
+        details: true,
+      },
+    }),
+    prisma.auditLog.findMany({
+      where: {
+        entityType: "Team",
+        entityId: { in: teamIds },
+        action: "ROSTER_GAMEPASS_PLAYER_ADDED",
+      },
+      orderBy: [{ createdAt: "desc" }],
+      select: {
+        entityId: true,
+        details: true,
+      },
+    }),
+  ]);
+
+  const latestUploadByTeam = new Map<string, Record<string, unknown>>();
+  for (const log of latestUploadLogs) {
+    if (!log.entityId || latestUploadByTeam.has(log.entityId)) {
+      continue;
+    }
+
+    const details =
+      log.details && typeof log.details === "object" && !Array.isArray(log.details)
+        ? (log.details as Record<string, unknown>)
+        : null;
+
+    if (details) {
+      latestUploadByTeam.set(log.entityId, details);
+    }
+  }
+
+  const gamepassIdsByTeam = new Map<string, Set<string>>();
+  for (const teamId of teamIds) {
+    gamepassIdsByTeam.set(teamId, new Set<string>());
+  }
+
+  for (const [teamId, details] of latestUploadByTeam.entries()) {
+    const uploadSeason = typeof details.season === "string" ? details.season : null;
+    if (uploadSeason !== season || !Array.isArray(details.gamespassMembers)) {
+      continue;
+    }
+
+    for (const member of details.gamespassMembers) {
+      if (!member || typeof member !== "object" || Array.isArray(member)) {
+        continue;
+      }
+
+      const record = member as Record<string, unknown>;
+      const gamepassId = typeof record.id === "string" ? record.id : null;
+      if (gamepassId) {
+        gamepassIdsByTeam.get(teamId)?.add(gamepassId.toLowerCase());
+      }
+    }
+  }
+
+  for (const log of addedGamespassLogs) {
+    if (!log.entityId) {
+      continue;
+    }
+
+    const details =
+      log.details && typeof log.details === "object" && !Array.isArray(log.details)
+        ? (log.details as Record<string, unknown>)
+        : null;
+
+    if (!details) {
+      continue;
+    }
+
+    const detailSeason = typeof details.season === "string" ? details.season : season;
+    const gamepassId = typeof details.gamepassId === "string" ? details.gamepassId : null;
+    if (detailSeason === season && gamepassId) {
+      gamepassIdsByTeam.get(log.entityId)?.add(gamepassId.toLowerCase());
+    }
+  }
+
+  return gamepassIdsByTeam;
+}
+
+export async function rerunMatchRosterViolationsForMatch(
+  matchId: string,
+  season = "2026-S1",
+): Promise<MatchViolationRerunSummary> {
   const match = await prisma.match.findUnique({
     where: { id: matchId },
     include: {
@@ -57,6 +153,7 @@ export async function rerunMatchRosterViolationsForMatch(matchId: string): Promi
     [match.teamAId, new Set(match.teamA.rosterEntries.map((entry) => entry.player.steamId64))],
     [match.teamBId, new Set(match.teamB.rosterEntries.map((entry) => entry.player.steamId64))],
   ]);
+  const activeGamepassIdsByTeam = await getActiveGamepassIdsByTeam([match.teamAId, match.teamBId], season);
 
   const deleted = await prisma.violation.deleteMany({
     where: {
@@ -69,6 +166,11 @@ export async function rerunMatchRosterViolationsForMatch(matchId: string): Promi
   for (const player of match.matchPlayers) {
     const steamId64 = player.steamId64?.trim() || null;
     if (steamId64 && activeRosterByTeam.get(player.teamId)?.has(steamId64)) {
+      summary.registeredPlayers += 1;
+      continue;
+    }
+
+    if (isLikelyGamespassId(player.rawSteamId) && activeGamepassIdsByTeam.get(player.teamId)?.has(player.rawSteamId.toLowerCase())) {
       summary.registeredPlayers += 1;
       continue;
     }
@@ -97,7 +199,7 @@ export async function rerunMatchRosterViolationsForMatch(matchId: string): Promi
   return summary;
 }
 
-export async function rerunAllMatchRosterViolations(): Promise<MatchViolationRerunSummary> {
+export async function rerunAllMatchRosterViolations(season = "2026-S1"): Promise<MatchViolationRerunSummary> {
   const matches = await prisma.match.findMany({
     where: {
       matchPlayers: {
@@ -113,7 +215,7 @@ export async function rerunAllMatchRosterViolations(): Promise<MatchViolationRer
   const totals = emptySummary();
 
   for (const match of matches) {
-    const summary = await rerunMatchRosterViolationsForMatch(match.id);
+    const summary = await rerunMatchRosterViolationsForMatch(match.id, season);
     totals.matchesChecked += summary.matchesChecked;
     totals.matchPlayersChecked += summary.matchPlayersChecked;
     totals.registeredPlayers += summary.registeredPlayers;

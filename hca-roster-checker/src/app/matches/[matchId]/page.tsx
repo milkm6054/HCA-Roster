@@ -289,7 +289,10 @@ export default function MatchDetailPage() {
     }
   }
 
-  async function addViolationPlayerToRoster(violationId: string) {
+  async function addViolationPlayerToRoster(
+    violationId: string,
+    resolutionType: "ADD_TO_TEAM_ROSTER" | "ADD_TO_TEAM_GAMEPASS",
+  ) {
     setBusyViolationId(violationId);
     setError("");
 
@@ -298,7 +301,7 @@ export default function MatchDetailPage() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          resolutionType: "ADD_TO_TEAM_ROSTER",
+          resolutionType,
           season: "2026-S1",
         }),
       });
@@ -580,14 +583,24 @@ export default function MatchDetailPage() {
                   {role === "HCA_ORGA" ? (
                     <td className="px-4 py-3">
                       {violation.type === "UNREGISTERED_PLAYER" && violation.team ? (
-                        <button
-                          type="button"
-                          className="bg-slate-900 px-3 py-1 text-xs text-white"
-                          onClick={() => addViolationPlayerToRoster(violation.id)}
-                          disabled={busyViolationId !== null}
-                        >
-                          {busyViolationId === violation.id ? "Adding..." : "Add to roster"}
-                        </button>
+                        <div className="flex flex-col gap-2">
+                          <button
+                            type="button"
+                            className="bg-slate-900 px-3 py-1 text-xs text-white"
+                            onClick={() => addViolationPlayerToRoster(violation.id, "ADD_TO_TEAM_ROSTER")}
+                            disabled={busyViolationId !== null}
+                          >
+                            {busyViolationId === violation.id ? "Adding..." : "Add Steam account"}
+                          </button>
+                          <button
+                            type="button"
+                            className="bg-slate-700 px-3 py-1 text-xs text-white"
+                            onClick={() => addViolationPlayerToRoster(violation.id, "ADD_TO_TEAM_GAMEPASS")}
+                            disabled={busyViolationId !== null}
+                          >
+                            {busyViolationId === violation.id ? "Adding..." : "Add Game Pass"}
+                          </button>
+                        </div>
                       ) : (
                         <span className="text-xs text-slate-400">-</span>
                       )}

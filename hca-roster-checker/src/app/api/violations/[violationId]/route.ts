@@ -6,7 +6,7 @@ import { isOrga, requireApiSession } from "@/lib/auth/guards";
 import { getActor } from "@/lib/auth/getActor";
 import { rerunMatchRosterViolationsForMatch } from "@/lib/matches/rerunMatchViolations";
 import { estimateSteamAccountCreatedAt } from "@/lib/steam/accountAge";
-import { normalizeSteamId } from "@/lib/steam/steamIds";
+import { isLikelyGamespassId, normalizeSteamId } from "@/lib/steam/steamIds";
 
 export async function PATCH(
   request: Request,
@@ -21,7 +21,7 @@ export async function PATCH(
   const { violationId } = await params;
   const body = (await request.json()) as {
     selectedTeamId?: string;
-    resolutionType?: "STEAM_ID" | "GAMESPASS" | "REMOVE_INVALID_ENTRY" | "ADD_TO_TEAM_ROSTER";
+    resolutionType?: "STEAM_ID" | "GAMESPASS" | "REMOVE_INVALID_ENTRY" | "ADD_TO_TEAM_ROSTER" | "ADD_TO_TEAM_GAMEPASS";
     correctedSteamId?: string;
     season?: string;
     displayName?: string;
@@ -300,8 +300,8 @@ export async function PATCH(
       );
     }
   } else {
-    if (body.resolutionType !== "ADD_TO_TEAM_ROSTER") {
-      return NextResponse.json({ error: "Choose the add-to-roster action for this violation." }, { status: 400 });
+    if (body.resolutionType !== "ADD_TO_TEAM_ROSTER" && body.resolutionType !== "ADD_TO_TEAM_GAMEPASS") {
+      return NextResponse.json({ error: "Choose how this player should be added to the roster." }, { status: 400 });
     }
 
     if (!existingViolation.teamId || !existingViolation.matchId) {
@@ -310,11 +310,6 @@ export async function PATCH(
 
     const teamId = existingViolation.teamId;
     const matchId = existingViolation.matchId;
-    const normalized = normalizeSteamId(existingViolation.rawSteamId || "");
-    if (!normalized.ok) {
-      return NextResponse.json({ error: normalized.reason }, { status: 400 });
-    }
-
     const season = body.season?.trim() || "2026-S1";
     const details =
       existingViolation.details && typeof existingViolation.details === "object" && !Array.isArray(existingViolation.details)
@@ -324,106 +319,192 @@ export async function PATCH(
       body.displayName?.trim() ||
       existingViolation.player?.displayName ||
       (typeof details.displayName === "string" ? details.displayName : null);
-    const age = estimateSteamAccountCreatedAt(normalized.steamId64);
+    if (body.resolutionType === "ADD_TO_TEAM_GAMEPASS") {
+      const gamepassId = (existingViolation.rawSteamId || "").trim();
+      if (!isLikelyGamespassId(gamepassId)) {
+        return NextResponse.json({ error: "This match row does not contain a valid Game Pass ID." }, { status: 400 });
+      }
 
-    try {
-      await prisma.$transaction(async (tx) => {
-        const existingPlayer = await tx.player.findUnique({
-          where: { steamId64: normalized.steamId64 },
-          include: {
-            rosterEntries: {
-              where: {
-                season,
-                status: RosterEntryStatus.ACTIVE,
-              },
-              include: {
-                team: {
-                  select: {
-                    name: true,
+      const [latestUploadLog, addedGamepassLogs] = await Promise.all([
+        prisma.auditLog.findFirst({
+          where: {
+            entityType: "Team",
+            entityId: teamId,
+            action: "ROSTER_UPLOADED",
+          },
+          orderBy: [{ createdAt: "desc" }],
+          select: {
+            details: true,
+          },
+        }),
+        prisma.auditLog.findMany({
+          where: {
+            entityType: "Team",
+            entityId: teamId,
+            action: "ROSTER_GAMEPASS_PLAYER_ADDED",
+          },
+          select: {
+            details: true,
+          },
+        }),
+      ]);
+
+      const uploadedDetails =
+        latestUploadLog?.details &&
+        typeof latestUploadLog.details === "object" &&
+        !Array.isArray(latestUploadLog.details)
+          ? (latestUploadLog.details as Record<string, unknown>)
+          : null;
+      const uploadedGamespassMembers =
+        typeof uploadedDetails?.season === "string" &&
+        uploadedDetails.season === season &&
+        Array.isArray(uploadedDetails.gamespassMembers)
+          ? uploadedDetails.gamespassMembers
+          : [];
+      const manuallyAddedGamepassIds = addedGamepassLogs
+        .map((log) =>
+          log.details && typeof log.details === "object" && !Array.isArray(log.details)
+            ? (log.details as Record<string, unknown>)
+            : null,
+        )
+        .filter((details) => typeof details?.season !== "string" || details.season === season)
+        .map((details) => (typeof details?.gamepassId === "string" ? details.gamepassId : null))
+        .filter((id): id is string => Boolean(id));
+      const uploadedGamepassIds = uploadedGamespassMembers
+        .map((member) =>
+          member && typeof member === "object" && !Array.isArray(member)
+            ? (member as Record<string, unknown>)
+            : null,
+        )
+        .map((member) => (typeof member?.id === "string" ? member.id : null))
+        .filter((id): id is string => Boolean(id));
+      const existingGamepassIds = [...uploadedGamepassIds, ...manuallyAddedGamepassIds];
+
+      if (existingGamepassIds.some((id) => id.toLowerCase() === gamepassId.toLowerCase())) {
+        return NextResponse.json({ error: "Game Pass player is already listed for this team." }, { status: 409 });
+      }
+
+      await createAuditLog({
+        action: "ROSTER_GAMEPASS_PLAYER_ADDED",
+        actor,
+        entityType: "Team",
+        entityId: teamId,
+        details: {
+          season,
+          gamepassId,
+          displayName,
+        },
+      });
+
+      rerunSummary = await rerunMatchRosterViolationsForMatch(matchId, season);
+      resolution = `Added Game Pass player to active roster list for ${season} and reran match validation`;
+    } else {
+      const normalized = normalizeSteamId(existingViolation.rawSteamId || "");
+      if (!normalized.ok) {
+        return NextResponse.json({ error: normalized.reason }, { status: 400 });
+      }
+
+      const age = estimateSteamAccountCreatedAt(normalized.steamId64);
+
+      try {
+        await prisma.$transaction(async (tx) => {
+          const existingPlayer = await tx.player.findUnique({
+            where: { steamId64: normalized.steamId64 },
+            include: {
+              rosterEntries: {
+                where: {
+                  season,
+                  status: RosterEntryStatus.ACTIVE,
+                },
+                include: {
+                  team: {
+                    select: {
+                      name: true,
+                    },
                   },
                 },
               },
             },
-          },
-        });
+          });
 
-        const activeEntries = existingPlayer?.rosterEntries || [];
-        const existingEntryOnThisTeam = activeEntries.find((entry) => entry.teamId === teamId);
-        const conflictingEntries = activeEntries.filter((entry) => entry.teamId !== teamId);
-        const memberName = displayName || existingPlayer?.displayName || existingViolation.rawSteamId || normalized.steamId64;
+          const activeEntries = existingPlayer?.rosterEntries || [];
+          const existingEntryOnThisTeam = activeEntries.find((entry) => entry.teamId === teamId);
+          const conflictingEntries = activeEntries.filter((entry) => entry.teamId !== teamId);
+          const memberName = displayName || existingPlayer?.displayName || existingViolation.rawSteamId || normalized.steamId64;
 
-        if (conflictingEntries.length > 0) {
-          const conflictingTeamNames = conflictingEntries.map((entry) => entry.team.name).join(", ");
-          throw new Error(`${memberName} is already part of ${conflictingTeamNames}.`);
-        }
+          if (conflictingEntries.length > 0) {
+            const conflictingTeamNames = conflictingEntries.map((entry) => entry.team.name).join(", ");
+            throw new Error(`${memberName} is already part of ${conflictingTeamNames}.`);
+          }
 
-        const player = await tx.player.upsert({
-          where: { steamId64: normalized.steamId64 },
-          create: {
-            steamId64: normalized.steamId64,
-            steamId3: normalized.steamId3,
-            displayName,
-            estimatedCreatedAt: age.estimatedCreatedAt,
-            accountAgeRisk: age.accountAgeRisk,
-          },
-          update: {
-            steamId3: normalized.steamId3,
-            displayName: displayName || undefined,
-            estimatedCreatedAt: age.estimatedCreatedAt,
-            accountAgeRisk: age.accountAgeRisk,
-          },
-        });
+          const player = await tx.player.upsert({
+            where: { steamId64: normalized.steamId64 },
+            create: {
+              steamId64: normalized.steamId64,
+              steamId3: normalized.steamId3,
+              displayName,
+              estimatedCreatedAt: age.estimatedCreatedAt,
+              accountAgeRisk: age.accountAgeRisk,
+            },
+            update: {
+              steamId3: normalized.steamId3,
+              displayName: displayName || undefined,
+              estimatedCreatedAt: age.estimatedCreatedAt,
+              accountAgeRisk: age.accountAgeRisk,
+            },
+          });
 
-        if (!existingEntryOnThisTeam) {
-          await tx.rosterEntry.upsert({
-            where: {
+          if (!existingEntryOnThisTeam) {
+            await tx.rosterEntry.upsert({
+              where: {
                 teamId_playerId_season: {
+                  teamId,
+                  playerId: player.id,
+                  season,
+                },
+              },
+              create: {
                 teamId,
                 playerId: player.id,
                 season,
+                status: RosterEntryStatus.ACTIVE,
+                submittedBy: actor,
+                submittedAt: new Date(),
+                lockedAt: null,
               },
-            },
-            create: {
+              update: {
+                status: RosterEntryStatus.ACTIVE,
+                submittedBy: actor,
+                submittedAt: new Date(),
+                lockedAt: null,
+              },
+            });
+          }
+
+          await tx.matchPlayer.updateMany({
+            where: {
+              matchId,
               teamId,
-              playerId: player.id,
-              season,
-              status: RosterEntryStatus.ACTIVE,
-              submittedBy: actor,
-              submittedAt: new Date(),
-              lockedAt: null,
+              rawSteamId: existingViolation.rawSteamId || "",
             },
-            update: {
-              status: RosterEntryStatus.ACTIVE,
-              submittedBy: actor,
-              submittedAt: new Date(),
-              lockedAt: null,
+            data: {
+              playerId: player.id,
+              steamId64: player.steamId64,
+              displayName: displayName || undefined,
             },
           });
+        });
+      } catch (error) {
+        if (error instanceof Error) {
+          return NextResponse.json({ error: error.message }, { status: 409 });
         }
 
-        await tx.matchPlayer.updateMany({
-          where: {
-            matchId,
-            teamId,
-            rawSteamId: existingViolation.rawSteamId || "",
-          },
-          data: {
-            playerId: player.id,
-            steamId64: player.steamId64,
-            displayName: displayName || undefined,
-          },
-        });
-      });
-    } catch (error) {
-      if (error instanceof Error) {
-        return NextResponse.json({ error: error.message }, { status: 409 });
+        throw error;
       }
 
-      throw error;
+      rerunSummary = await rerunMatchRosterViolationsForMatch(matchId, season);
+      resolution = `Added player to active roster for ${season} and reran match validation`;
     }
-
-    rerunSummary = await rerunMatchRosterViolationsForMatch(matchId);
-    resolution = `Added player to active roster for ${season} and reran match validation`;
   }
 
   await createAuditLog({
