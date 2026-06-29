@@ -22,7 +22,7 @@ function emptySummary(): MatchViolationRerunSummary {
   };
 }
 
-async function getActiveGamepassIdsByTeam(teamIds: string[], season: string) {
+export async function getActiveGamepassIdsByTeam(teamIds: string[], season: string) {
   const [latestUploadLogs, addedGamespassLogs] = await Promise.all([
     prisma.auditLog.findMany({
       where: {

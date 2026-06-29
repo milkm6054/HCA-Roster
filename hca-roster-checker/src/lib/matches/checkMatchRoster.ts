@@ -1,8 +1,9 @@
 import { Prisma, ViolationSeverity, ViolationStatus, ViolationType } from "@prisma/client";
+import { getActiveGamepassIdsByTeam } from "@/lib/matches/rerunMatchViolations";
 import { prisma } from "@/lib/prisma";
 import type { ParsedMatchStatsRow } from "@/lib/matches/parseMatchStatsCsv";
 import { estimateSteamAccountCreatedAt } from "@/lib/steam/accountAge";
-import { normalizeSteamId } from "@/lib/steam/steamIds";
+import { isLikelyGamespassId, normalizeSteamId } from "@/lib/steam/steamIds";
 
 export type MatchRosterCheckInput = {
   matchId: string;
@@ -150,6 +151,7 @@ export async function checkMatchRoster({
     match.teamBId,
     new Set(match.teamB.rosterEntries.map((entry) => entry.player.steamId64)),
   );
+  const activeGamepassIdsByTeam = await getActiveGamepassIdsByTeam([match.teamAId, match.teamBId], "2026-S1");
 
   const normalizedRows = rows.map((row) => ({
     row,
@@ -255,7 +257,9 @@ export async function checkMatchRoster({
       });
 
       const teamRoster = activeRosterByTeam.get(teamId) || new Set<string>();
-      const isRegistered = steamId64 ? teamRoster.has(steamId64) : false;
+      const isRegistered =
+        (steamId64 ? teamRoster.has(steamId64) : false) ||
+        (isLikelyGamespassId(row.steamId) && activeGamepassIdsByTeam.get(teamId)?.has(row.steamId.toLowerCase()) === true);
 
       if (isRegistered) {
         registeredPlayers += 1;
