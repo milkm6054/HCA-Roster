@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { createAuditLog } from "@/lib/audit/auditLog";
 import { isOrga, requireApiSession } from "@/lib/auth/guards";
 import { getActor } from "@/lib/auth/getActor";
-import { HLL_MAPS } from "@/lib/matches/hllMaps";
+import { getMidpointsForMap, HLL_MAPS } from "@/lib/matches/hllMaps";
 
 export const dynamic = "force-dynamic";
 
@@ -71,6 +71,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Please choose a valid HLL map." }, { status: 400 });
   }
 
+  const midpointName = body.midpointName?.trim() || null;
+  const mapMidpoints = getMidpointsForMap(body.mapName);
+  if (body.mapName && midpointName && !mapMidpoints.includes(midpointName)) {
+    return NextResponse.json({ error: "Please choose a valid midpoint for the selected map." }, { status: 400 });
+  }
+
   const fixtureTeamIds = new Set([body.teamAId, body.teamBId]);
   const axisTeamId = body.axisTeamId?.trim() || null;
   const alliesTeamId = body.alliesTeamId?.trim() || null;
@@ -103,7 +109,7 @@ export async function POST(request: Request) {
       alliesTeamId,
       status: gameUrl ? MatchStatus.READY_TO_IMPORT : MatchStatus.SCHEDULED,
       mapName: body.mapName || null,
-      midpointName: body.midpointName?.trim() || null,
+      midpointName,
       gameUrl: gameUrl || null,
       playedAt: body.playedAt ? new Date(body.playedAt) : null,
     },
