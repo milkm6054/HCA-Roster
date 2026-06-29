@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { HLL_MAPS } from "@/lib/matches/hllMaps";
+import { getMidpointsForMap, HLL_MAPS } from "@/lib/matches/hllMaps";
 
 type MatchData = {
   id: string;
@@ -29,6 +29,17 @@ type MatchData = {
     deathsPerMinute?: number | null;
     team: { name: string };
   }>;
+  violations: Array<{
+    id: string;
+    type: "UNREGISTERED_PLAYER" | "DUPLICATE_ROSTER" | "INVALID_STEAM_ID" | "NEW_ACCOUNT";
+    severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+    status: "OPEN" | "DISMISSED" | "CONFIRMED";
+    rawSteamId?: string | null;
+    details: unknown;
+    team?: { name: string } | null;
+    player?: { displayName?: string | null } | null;
+    createdAt?: string | null;
+  }>;
 };
 
 type StreamerCandidate = {
@@ -49,6 +60,44 @@ type StreamerPromptState = {
   candidates: StreamerCandidate[];
   suggestedSteamIds: string[];
 };
+
+function getMatchViolationPlayerName(violation: MatchData["violations"][number]) {
+  if (violation.player?.displayName) {
+    return violation.player.displayName;
+  }
+
+  const details =
+    violation.details && typeof violation.details === "object" && !Array.isArray(violation.details)
+      ? (violation.details as Record<string, unknown>)
+      : null;
+  return typeof details?.displayName === "string" ? details.displayName : "-";
+}
+
+function getMatchViolationReason(violation: MatchData["violations"][number]) {
+  const details =
+    violation.details && typeof violation.details === "object" && !Array.isArray(violation.details)
+      ? (violation.details as Record<string, unknown>)
+      : null;
+
+  if (typeof details?.reason === "string") {
+    return details.reason;
+  }
+
+  if (typeof details?.resolution === "string") {
+    return details.resolution;
+  }
+
+  return "No violation detail captured.";
+}
+
+function getMatchViolationRowNumber(violation: MatchData["violations"][number]) {
+  const details =
+    violation.details && typeof violation.details === "object" && !Array.isArray(violation.details)
+      ? (violation.details as Record<string, unknown>)
+      : null;
+
+  return typeof details?.rowNumber === "number" ? details.rowNumber : null;
+}
 
 export default function MatchDetailPage() {
   const params = useParams<{ matchId: string }>();
@@ -245,6 +294,14 @@ export default function MatchDetailPage() {
     );
   }
 
+  function updateEditedMapName(nextMapName: string) {
+    const nextMidpoints = getMidpointsForMap(nextMapName);
+    setEditMapName(nextMapName);
+    setEditMidpointName((current) => (nextMidpoints.includes(current) ? current : ""));
+  }
+
+  const midpointOptions = getMidpointsForMap(editMapName);
+
   return (
     <section className="space-y-6">
       <h1 className="text-2xl font-semibold tracking-tight">
@@ -331,7 +388,7 @@ export default function MatchDetailPage() {
           </label>
           <label className="space-y-2">
             <span className="text-xs uppercase tracking-[0.18em] text-slate-500">Map</span>
-            <select value={editMapName} onChange={(event) => setEditMapName(event.target.value)}>
+            <select value={editMapName} onChange={(event) => updateEditedMapName(event.target.value)}>
               <option value="">Unknown</option>
               {HLL_MAPS.map((map) => (
                 <option key={map} value={map}>
@@ -342,7 +399,18 @@ export default function MatchDetailPage() {
           </label>
           <label className="space-y-2">
             <span className="text-xs uppercase tracking-[0.18em] text-slate-500">Midpoint</span>
-            <input value={editMidpointName} onChange={(event) => setEditMidpointName(event.target.value)} placeholder="Official strongpoint" />
+            <select
+              value={editMidpointName}
+              onChange={(event) => setEditMidpointName(event.target.value)}
+              disabled={midpointOptions.length === 0}
+            >
+              <option value="">{midpointOptions.length > 0 ? "Select midpoint" : "Choose map first"}</option>
+              {midpointOptions.map((midpoint) => (
+                <option key={midpoint} value={midpoint}>
+                  {midpoint}
+                </option>
+              ))}
+            </select>
           </label>
           <label className="space-y-2">
             <span className="text-xs uppercase tracking-[0.18em] text-slate-500">Stats link</span>
@@ -445,6 +513,55 @@ export default function MatchDetailPage() {
           <pre className="mt-2 overflow-auto text-xs">{JSON.stringify(uploadSummary, null, 2)}</pre>
         </div>
       ) : null}
+
+      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+        <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+          <h2 className="text-lg font-semibold">Match violations</h2>
+          <p className="text-sm text-slate-500">
+            {match?.violations.length
+              ? `${match.violations.length} violation${match.violations.length === 1 ? "" : "s"} were raised from this match import.`
+              : "No violations were raised for this match."}
+          </p>
+        </div>
+        <table className="w-full border-collapse text-left text-sm">
+          <thead className="bg-slate-50">
+            <tr>
+              <th className="px-4 py-3">Type</th>
+              <th className="px-4 py-3">Player</th>
+              <th className="px-4 py-3">Team</th>
+              <th className="px-4 py-3">Steam ID</th>
+              <th className="px-4 py-3">Severity</th>
+              <th className="px-4 py-3">Reason</th>
+            </tr>
+          </thead>
+          <tbody>
+            {match?.violations.map((violation) => {
+              const rowNumber = getMatchViolationRowNumber(violation);
+
+              return (
+                <tr key={violation.id} className="border-t border-slate-100 align-top">
+                  <td className="px-4 py-3">{violation.type}</td>
+                  <td className="px-4 py-3">{getMatchViolationPlayerName(violation)}</td>
+                  <td className="px-4 py-3">{violation.team?.name || "-"}</td>
+                  <td className="px-4 py-3 font-mono text-xs">{violation.rawSteamId || "-"}</td>
+                  <td className="px-4 py-3">{violation.severity}</td>
+                  <td className="px-4 py-3 text-slate-600">
+                    {getMatchViolationReason(violation)}
+                    {rowNumber !== null ? <span className="mt-1 block text-xs text-slate-500">Stats row {rowNumber}</span> : null}
+                  </td>
+                </tr>
+              );
+            })}
+            {match?.violations.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-4 py-6 text-center text-sm text-slate-500">
+                  No violation details for this match.
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
 
       <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
         <table className="w-full border-collapse text-left text-sm">

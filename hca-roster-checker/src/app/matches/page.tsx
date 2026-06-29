@@ -253,7 +253,15 @@ export default function MatchesPage() {
                 <td className="px-4 py-3">{match.mapName || "-"}</td>
                 <td className="px-4 py-3">{match.midpointName || "-"}</td>
                 <td className="px-4 py-3">{match._count.matchPlayers}</td>
-                <td className="px-4 py-3">{match._count.violations}</td>
+                <td className="px-4 py-3">
+                  {match._count.violations > 0 ? (
+                    <Link href={`/matches/${match.id}`} className="text-amber-300 underline decoration-amber-300/50 underline-offset-4">
+                      {match._count.violations} review
+                    </Link>
+                  ) : (
+                    0
+                  )}
+                </td>
                 <td className="px-4 py-3">
                   {match.gameUrl ? (
                     <a href={match.gameUrl} target="_blank" rel="noreferrer" className="text-cyan-400 underline decoration-cyan-400/50 underline-offset-4">

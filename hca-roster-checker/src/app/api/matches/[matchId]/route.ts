@@ -3,7 +3,7 @@ import { MatchStatus } from "@prisma/client";
 import { isOrga, requireApiSession } from "@/lib/auth/guards";
 import { createAuditLog } from "@/lib/audit/auditLog";
 import { getActor } from "@/lib/auth/getActor";
-import { HLL_MAPS } from "@/lib/matches/hllMaps";
+import { getMidpointsForMap, HLL_MAPS } from "@/lib/matches/hllMaps";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(
@@ -28,6 +28,10 @@ export async function GET(
         orderBy: { createdAt: "desc" },
       },
       violations: {
+        include: {
+          team: true,
+          player: true,
+        },
         orderBy: { createdAt: "desc" },
       },
     },
@@ -108,6 +112,11 @@ export async function PATCH(
     return NextResponse.json({ error: "Please choose a valid HLL map." }, { status: 400 });
   }
 
+  const mapMidpoints = getMidpointsForMap(mapName);
+  if (mapName && midpointName && !mapMidpoints.includes(midpointName)) {
+    return NextResponse.json({ error: "Please choose a valid midpoint for the selected map." }, { status: 400 });
+  }
+
   if (gameUrl) {
     try {
       const parsedUrl = new URL(gameUrl);
@@ -149,6 +158,10 @@ export async function PATCH(
         orderBy: { createdAt: "desc" },
       },
       violations: {
+        include: {
+          team: true,
+          player: true,
+        },
         orderBy: { createdAt: "desc" },
       },
     },
