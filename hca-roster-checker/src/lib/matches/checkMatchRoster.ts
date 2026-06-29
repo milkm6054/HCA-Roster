@@ -232,22 +232,6 @@ export async function checkMatchRoster({
       const steamId64 = normalized.ok ? normalized.steamId64 : null;
 
       if (!teamId) {
-        await tx.violation.create({
-          data: {
-            type: ViolationType.UNREGISTERED_PLAYER,
-            severity: ViolationSeverity.CRITICAL,
-            status: ViolationStatus.OPEN,
-            matchId,
-            rawSteamId: row.steamId,
-            details: {
-              reason: "Unknown team label in match stats upload",
-              teamLabel: row.team,
-              rowNumber: row.rowNumber,
-            } as Prisma.JsonObject,
-          },
-        });
-        unregisteredPlayers += 1;
-        violationsCreated += 1;
         continue;
       }
 
