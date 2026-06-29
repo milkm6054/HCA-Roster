@@ -111,6 +111,7 @@ export default function MatchDetailPage() {
   const [error, setError] = useState("");
   const [busyImport, setBusyImport] = useState(false);
   const [busySaveDetails, setBusySaveDetails] = useState(false);
+  const [busyViolationId, setBusyViolationId] = useState<string | null>(null);
   const [streamerPrompt, setStreamerPrompt] = useState<StreamerPromptState | null>(null);
   const [selectedStreamerIds, setSelectedStreamerIds] = useState<string[]>([]);
   const [editAxisTeamId, setEditAxisTeamId] = useState("");
@@ -285,6 +286,32 @@ export default function MatchDetailPage() {
       await refreshMatch();
     } finally {
       setBusyImport(false);
+    }
+  }
+
+  async function addViolationPlayerToRoster(violationId: string) {
+    setBusyViolationId(violationId);
+    setError("");
+
+    try {
+      const res = await fetch(`/api/violations/${violationId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          resolutionType: "ADD_TO_TEAM_ROSTER",
+          season: "2026-S1",
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Failed to add player to roster.");
+        return;
+      }
+
+      await refreshMatch();
+    } finally {
+      setBusyViolationId(null);
     }
   }
 
@@ -532,6 +559,7 @@ export default function MatchDetailPage() {
               <th className="px-4 py-3">Steam ID</th>
               <th className="px-4 py-3">Severity</th>
               <th className="px-4 py-3">Reason</th>
+              {role === "HCA_ORGA" ? <th className="px-4 py-3">Action</th> : null}
             </tr>
           </thead>
           <tbody>
@@ -549,12 +577,28 @@ export default function MatchDetailPage() {
                     {getMatchViolationReason(violation)}
                     {rowNumber !== null ? <span className="mt-1 block text-xs text-slate-500">Stats row {rowNumber}</span> : null}
                   </td>
+                  {role === "HCA_ORGA" ? (
+                    <td className="px-4 py-3">
+                      {violation.type === "UNREGISTERED_PLAYER" && violation.team ? (
+                        <button
+                          type="button"
+                          className="bg-slate-900 px-3 py-1 text-xs text-white"
+                          onClick={() => addViolationPlayerToRoster(violation.id)}
+                          disabled={busyViolationId !== null}
+                        >
+                          {busyViolationId === violation.id ? "Adding..." : "Add to roster"}
+                        </button>
+                      ) : (
+                        <span className="text-xs text-slate-400">-</span>
+                      )}
+                    </td>
+                  ) : null}
                 </tr>
               );
             })}
             {match?.violations.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-sm text-slate-500">
+                <td colSpan={role === "HCA_ORGA" ? 7 : 6} className="px-4 py-6 text-center text-sm text-slate-500">
                   No violation details for this match.
                 </td>
               </tr>

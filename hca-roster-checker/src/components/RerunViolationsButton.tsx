@@ -17,7 +17,9 @@ export function RerunViolationsButton() {
         return;
       }
 
-      setResultText(`Rerun complete: created ${data.violationsCreated ?? 0}, removed ${data.deletedViolations ?? 0}.`);
+      setResultText(
+        `Rerun complete: created ${data.violationsCreated ?? 0}, removed ${data.deletedViolations ?? 0}, checked ${data.matchesChecked ?? 0} matches.`,
+      );
     } catch {
       setResultText("Failed to rerun validation.");
     } finally {
@@ -32,7 +34,7 @@ export function RerunViolationsButton() {
         onClick={rerunAllViolations}
         className="rounded-full border border-cyan-400/20 bg-cyan-400/88 px-3 py-1.5 text-xs font-semibold text-slate-950 shadow-lg shadow-cyan-500/20 hover:bg-cyan-300 disabled:opacity-60"
         disabled={busy}
-        title="Rerun duplicate-roster validation for all teams"
+        title="Rerun roster validation for all teams and imported matches"
       >
         {busy ? "Rerunning..." : "Rerun Violations"}
       </button>

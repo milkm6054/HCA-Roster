@@ -1,6 +1,7 @@
 import { Prisma, ViolationSeverity, ViolationStatus, ViolationType } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { isOrga, requireApiSession } from "@/lib/auth/guards";
+import { rerunAllMatchRosterViolations } from "@/lib/matches/rerunMatchViolations";
 import { prisma } from "@/lib/prisma";
 import { getRootAdminUsername } from "@/lib/auth/rootAdmin";
 
@@ -72,10 +73,17 @@ export async function POST(request: Request) {
     // NEW_ACCOUNT checks are intentionally disabled.
   }
 
+  const matchRerunSummary = await rerunAllMatchRosterViolations();
+
   return NextResponse.json({
     season,
     activeRosterEntries: entries.length,
-    deletedViolations: deleted.count,
-    violationsCreated,
+    deletedViolations: deleted.count + matchRerunSummary.deletedViolations,
+    violationsCreated: violationsCreated + matchRerunSummary.violationsCreated,
+    duplicateRosterViolationsCreated: violationsCreated,
+    matchViolationsCreated: matchRerunSummary.violationsCreated,
+    matchViolationsDeleted: matchRerunSummary.deletedViolations,
+    matchesChecked: matchRerunSummary.matchesChecked,
+    matchPlayersChecked: matchRerunSummary.matchPlayersChecked,
   });
 }

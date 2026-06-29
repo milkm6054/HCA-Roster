@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { createAuditLog } from "@/lib/audit/auditLog";
 import { isOrga, requireApiSession } from "@/lib/auth/guards";
 import { getActor } from "@/lib/auth/getActor";
+import { rerunMatchRosterViolationsForMatch } from "@/lib/matches/rerunMatchViolations";
 import { estimateSteamAccountCreatedAt } from "@/lib/steam/accountAge";
 import { normalizeSteamId } from "@/lib/steam/steamIds";
 
@@ -20,8 +21,10 @@ export async function PATCH(
   const { violationId } = await params;
   const body = (await request.json()) as {
     selectedTeamId?: string;
-    resolutionType?: "STEAM_ID" | "GAMESPASS" | "REMOVE_INVALID_ENTRY";
+    resolutionType?: "STEAM_ID" | "GAMESPASS" | "REMOVE_INVALID_ENTRY" | "ADD_TO_TEAM_ROSTER";
     correctedSteamId?: string;
+    season?: string;
+    displayName?: string;
   };
 
   const existingViolation = await prisma.violation.findUnique({
@@ -49,7 +52,8 @@ export async function PATCH(
 
   if (
     existingViolation.type !== ViolationType.DUPLICATE_ROSTER &&
-    existingViolation.type !== ViolationType.INVALID_STEAM_ID
+    existingViolation.type !== ViolationType.INVALID_STEAM_ID &&
+    existingViolation.type !== ViolationType.UNREGISTERED_PLAYER
   ) {
     return NextResponse.json({ error: "This violation type cannot be resolved here." }, { status: 400 });
   }
@@ -63,6 +67,7 @@ export async function PATCH(
   let removedTeamNames: string[] = [];
   let resolution = "Resolved violation";
   let duplicateViolationsCreated = 0;
+  let rerunSummary: Awaited<ReturnType<typeof rerunMatchRosterViolationsForMatch>> | null = null;
 
   if (existingViolation.type === ViolationType.DUPLICATE_ROSTER) {
     const selectedTeamId = body.selectedTeamId?.trim();
@@ -110,7 +115,7 @@ export async function PATCH(
       });
     });
     resolution = "Selected active roster team and removed other roster entries";
-  } else {
+  } else if (existingViolation.type === ViolationType.INVALID_STEAM_ID) {
     const resolutionType = body.resolutionType;
     if (resolutionType === "GAMESPASS") {
       await prisma.violation.update({
@@ -294,6 +299,131 @@ export async function PATCH(
         { status: 400 },
       );
     }
+  } else {
+    if (body.resolutionType !== "ADD_TO_TEAM_ROSTER") {
+      return NextResponse.json({ error: "Choose the add-to-roster action for this violation." }, { status: 400 });
+    }
+
+    if (!existingViolation.teamId || !existingViolation.matchId) {
+      return NextResponse.json({ error: "This match violation is missing its team or match reference." }, { status: 400 });
+    }
+
+    const teamId = existingViolation.teamId;
+    const matchId = existingViolation.matchId;
+    const normalized = normalizeSteamId(existingViolation.rawSteamId || "");
+    if (!normalized.ok) {
+      return NextResponse.json({ error: normalized.reason }, { status: 400 });
+    }
+
+    const season = body.season?.trim() || "2026-S1";
+    const details =
+      existingViolation.details && typeof existingViolation.details === "object" && !Array.isArray(existingViolation.details)
+        ? (existingViolation.details as Record<string, unknown>)
+        : {};
+    const displayName =
+      body.displayName?.trim() ||
+      existingViolation.player?.displayName ||
+      (typeof details.displayName === "string" ? details.displayName : null);
+    const age = estimateSteamAccountCreatedAt(normalized.steamId64);
+
+    try {
+      await prisma.$transaction(async (tx) => {
+        const existingPlayer = await tx.player.findUnique({
+          where: { steamId64: normalized.steamId64 },
+          include: {
+            rosterEntries: {
+              where: {
+                season,
+                status: RosterEntryStatus.ACTIVE,
+              },
+              include: {
+                team: {
+                  select: {
+                    name: true,
+                  },
+                },
+              },
+            },
+          },
+        });
+
+        const activeEntries = existingPlayer?.rosterEntries || [];
+        const existingEntryOnThisTeam = activeEntries.find((entry) => entry.teamId === teamId);
+        const conflictingEntries = activeEntries.filter((entry) => entry.teamId !== teamId);
+        const memberName = displayName || existingPlayer?.displayName || existingViolation.rawSteamId || normalized.steamId64;
+
+        if (conflictingEntries.length > 0) {
+          const conflictingTeamNames = conflictingEntries.map((entry) => entry.team.name).join(", ");
+          throw new Error(`${memberName} is already part of ${conflictingTeamNames}.`);
+        }
+
+        const player = await tx.player.upsert({
+          where: { steamId64: normalized.steamId64 },
+          create: {
+            steamId64: normalized.steamId64,
+            steamId3: normalized.steamId3,
+            displayName,
+            estimatedCreatedAt: age.estimatedCreatedAt,
+            accountAgeRisk: age.accountAgeRisk,
+          },
+          update: {
+            steamId3: normalized.steamId3,
+            displayName: displayName || undefined,
+            estimatedCreatedAt: age.estimatedCreatedAt,
+            accountAgeRisk: age.accountAgeRisk,
+          },
+        });
+
+        if (!existingEntryOnThisTeam) {
+          await tx.rosterEntry.upsert({
+            where: {
+                teamId_playerId_season: {
+                teamId,
+                playerId: player.id,
+                season,
+              },
+            },
+            create: {
+              teamId,
+              playerId: player.id,
+              season,
+              status: RosterEntryStatus.ACTIVE,
+              submittedBy: actor,
+              submittedAt: new Date(),
+              lockedAt: null,
+            },
+            update: {
+              status: RosterEntryStatus.ACTIVE,
+              submittedBy: actor,
+              submittedAt: new Date(),
+              lockedAt: null,
+            },
+          });
+        }
+
+        await tx.matchPlayer.updateMany({
+          where: {
+            matchId,
+            teamId,
+            rawSteamId: existingViolation.rawSteamId || "",
+          },
+          data: {
+            playerId: player.id,
+            steamId64: player.steamId64,
+            displayName: displayName || undefined,
+          },
+        });
+      });
+    } catch (error) {
+      if (error instanceof Error) {
+        return NextResponse.json({ error: error.message }, { status: 409 });
+      }
+
+      throw error;
+    }
+
+    rerunSummary = await rerunMatchRosterViolationsForMatch(matchId);
+    resolution = `Added player to active roster for ${season} and reran match validation`;
   }
 
   await createAuditLog({
@@ -318,8 +448,9 @@ export async function PATCH(
   return NextResponse.json({
     violation: {
       ...existingViolation,
-      status: ViolationStatus.CONFIRMED,
+      status: existingViolation.type === ViolationType.UNREGISTERED_PLAYER ? ViolationStatus.DISMISSED : ViolationStatus.CONFIRMED,
     },
     duplicateViolationsCreated,
+    rerunSummary,
   });
 }
